@@ -19,11 +19,15 @@ class StatusScreen extends StatefulWidget {
 class _StatusScreenState extends State<StatusScreen> {
   DateTime _selectedDate = DateTime.now();
   List<HourlyRecord> _records = [];
+  bool _chartReady = false;
 
   @override
   void initState() {
     super.initState();
     _loadRecords();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _chartReady = true);
+    });
   }
 
   void _loadRecords() {
@@ -97,7 +101,16 @@ class _StatusScreenState extends State<StatusScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              DailyChart(records: _records, date: _selectedDate),
+              RepaintBoundary(
+                child: _chartReady
+                    ? DailyChart(records: _records, date: _selectedDate)
+                    : const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+              ),
               const SizedBox(height: 24),
               if (_records.isNotEmpty) ...[
                 Text(
