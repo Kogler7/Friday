@@ -3,16 +3,18 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/activity_state.dart';
 import '../models/hourly_record.dart';
+import 'settings_service.dart';
 
 const String _keyPrefix = 'planplus_hourly_';
 
-/// 按日期存储小时记录，key 为 dateKey（如 2025-01-30），value 为 HourlyRecord 列表的 JSON
+/// 按日期存储时段记录，槽位按设置中的统计单位（默认 20 分钟）归一化
 class StorageService {
   StorageService._();
   static late final SharedPreferences _prefs;
 
-  /// 开发模式下按 2 分钟粒度；正式模式按整点
+  /// 开发模式下按 2 分钟粒度；正式模式按设置中的统计单位（默认 20 分钟）
   static DateTime _normalizeSlot(DateTime slotStart) {
     if (kDebugMode) {
       final m = slotStart.minute - (slotStart.minute % 2);
@@ -26,16 +28,30 @@ class StorageService {
         0,
       );
     }
+    final unit = SettingsService.isInitialized
+        ? SettingsService.current.statUnitMinutes
+        : 20;
+    final totalMinutes =
+        slotStart.hour * 60 + slotStart.minute + slotStart.second ~/ 60;
+    final rounded = (totalMinutes ~/ unit) * unit;
+    final h = rounded ~/ 60;
+    final m = rounded % 60;
     return DateTime(
       slotStart.year,
       slotStart.month,
       slotStart.day,
-      slotStart.hour,
-      0,
+      h % 24,
+      m,
       0,
       0,
     );
   }
+
+  /// 统计单位（分钟），用于生成间隔内槽位
+  static int get _statUnitMinutes =>
+      SettingsService.isInitialized
+          ? SettingsService.current.statUnitMinutes
+          : 20;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -87,5 +103,30 @@ class StorageService {
     final dateKey =
         '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     await _prefs.remove(_recordKey(dateKey));
+  }
+
+  /// 判断某间隔内是否已有完整记录（每个统计单位槽位都有）
+  static bool hasRecordForInterval(DateTime intervalStart, Duration length) {
+    final unit = kDebugMode ? 2 : _statUnitMinutes;
+    final totalSlots = length.inMinutes ~/ unit;
+    for (var i = 0; i < totalSlots; i++) {
+      final slot = intervalStart.add(Duration(minutes: i * unit));
+      if (getRecordForHour(slot) == null) return false;
+    }
+    return true;
+  }
+
+  /// 将某间隔内所有统计单位槽位保存为同一状态（用于提醒选择后或静默时段自动填充）
+  static Future<void> saveRecordsForInterval(
+    DateTime intervalStart,
+    Duration length,
+    ActivityState state,
+  ) async {
+    final unit = kDebugMode ? 2 : _statUnitMinutes;
+    final totalSlots = length.inMinutes ~/ unit;
+    for (var i = 0; i < totalSlots; i++) {
+      final slotStart = intervalStart.add(Duration(minutes: i * unit));
+      await saveRecord(HourlyRecord(hourStart: slotStart, state: state));
+    }
   }
 }

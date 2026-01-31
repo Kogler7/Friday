@@ -9,6 +9,7 @@ import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/daily_chart.dart';
 import '../widgets/hourly_prompt_dialog.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -83,6 +84,17 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('PlanPlus · 任务规划'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '状态与提醒设置',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
           if (kIsDevMode)
             IconButton(
               icon: const Icon(Icons.science),
