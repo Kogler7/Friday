@@ -15,7 +15,7 @@ class NotificationService {
   static const String _channelId = 'planplus_hourly';
   static const String _channelName = '小时状态提醒';
 
-  /// 点击通知后待处理的小时（由 HomeScreen 读取并弹窗）
+  /// 点击通知后待处理的小时（由 MainShell 读取并弹窗）
   static DateTime? pendingHourToRecord;
 
   static bool _initialized = false;
@@ -290,7 +290,7 @@ class NotificationService {
     }
   }
 
-  /// 清除「待处理小时」（HomeScreen 弹窗后调用）
+  /// 清除「待处理小时」（MainShell 弹窗后调用）
   static void clearPendingHour() {
     pendingHourToRecord = null;
   }

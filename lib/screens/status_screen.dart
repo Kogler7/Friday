@@ -42,47 +42,6 @@ class _StatusScreenState extends State<StatusScreen> {
         _selectedDate.day == DateTime.now().day;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('状态'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          if (kIsDevMode)
-            IconButton(
-              icon: const Icon(Icons.science),
-              tooltip: '开发：填充示例数据',
-              onPressed: () async {
-                await DevSampleData.insertSampleData();
-                _loadRecords();
-              },
-            ),
-          if (kIsDevMode)
-            IconButton(
-              icon: const Icon(Icons.delete_sweep),
-              tooltip: '开发：清除今日/昨日示例',
-              onPressed: () async {
-                await DevSampleData.clearSampleDataForTodayAndYesterday();
-                _loadRecords();
-              },
-            ),
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now().add(const Duration(days: 365)),
-              );
-              if (picked != null) {
-                setState(() {
-                  _selectedDate = picked;
-                  _records = StorageService.getRecordsForDate(_selectedDate);
-                });
-              }
-            },
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: () async => _loadRecords(),
         child: SingleChildScrollView(
@@ -91,9 +50,51 @@ class _StatusScreenState extends State<StatusScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                isToday ? '今天 $dateStr' : dateStr,
-                style: Theme.of(context).textTheme.titleLarge,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      isToday ? '今天 $dateStr' : dateStr,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  if (kIsDevMode)
+                    IconButton(
+                      icon: const Icon(Icons.science),
+                      tooltip: '填充示例数据',
+                      onPressed: () async {
+                        await DevSampleData.insertSampleData();
+                        _loadRecords();
+                      },
+                    ),
+                  if (kIsDevMode)
+                    IconButton(
+                      icon: const Icon(Icons.delete_sweep),
+                      tooltip: '清除示例',
+                      onPressed: () async {
+                        await DevSampleData.clearSampleDataForTodayAndYesterday();
+                        _loadRecords();
+                      },
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    tooltip: '选择日期',
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _selectedDate = picked;
+                          _records = StorageService.getRecordsForDate(_selectedDate);
+                        });
+                      }
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               DailyChart(records: _records, date: _selectedDate),
