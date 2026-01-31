@@ -56,18 +56,33 @@ class _TodoTimelineState extends State<TodoTimeline>
   int? _pendingGranularityIndex;
   bool _scaleUpdateScheduled = false;
 
-  /// 动画中用于 Y 向缩放的系数（1→目标/源），非动画时为 1
-  double get _scaleY {
-    if (_animatingToGranularityIndex == null) return 1.0;
+  /// 当前用于布局的日高与每小时像素（动画中在源与目标间插值，刻度线平移而非拉伸）
+  double get _displayDayHeight {
+    if (_animatingToGranularityIndex == null) return dayHeightFor(_granularityIndex);
     final t = _granularityAnimationT;
-    final from = dayHeightFor(_granularityIndex);
-    final to = dayHeightFor(_animatingToGranularityIndex!);
-    return lerpDouble(1.0, to / from, t)!;
+    return lerpDouble(
+      dayHeightFor(_granularityIndex),
+      dayHeightFor(_animatingToGranularityIndex!),
+      t,
+    )!;
   }
 
-  /// 当前用于布局的日高与每小时像素（动画中保持源档位，不随 t 插值，避免列表重算导致锚点漂移）
-  double get _displayDayHeight => dayHeightFor(_granularityIndex);
-  double get _displayPixelsPerHour => pixelsPerHourFor(_granularityIndex);
+  double get _displayPixelsPerHour {
+    if (_animatingToGranularityIndex == null) return pixelsPerHourFor(_granularityIndex);
+    final t = _granularityAnimationT;
+    return lerpDouble(
+      pixelsPerHourFor(_granularityIndex),
+      pixelsPerHourFor(_animatingToGranularityIndex!),
+      t,
+    )!;
+  }
+
+  /// 过渡中文字透明度：前一半渐隐，后一半渐显
+  static double _textOpacityForTransition(double? t) {
+    if (t == null) return 1.0;
+    if (t < 0.5) return (1.0 - 2 * t).clamp(0.0, 1.0);
+    return (2 * (t - 0.5)).clamp(0.0, 1.0);
+  }
 
   int get _tickIntervalMinutes => tickIntervalMinutesFor(_granularityIndex);
 
@@ -305,6 +320,7 @@ class _TodoTimelineState extends State<TodoTimeline>
     _granularityAnimation.addListener(() {
       if (!mounted) return;
       setState(() => _granularityAnimationT = _granularityAnimation.value);
+      _syncScrollToAnchor();
     });
     _granularityAnimationController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -408,7 +424,6 @@ class _TodoTimelineState extends State<TodoTimeline>
                     timeFmt,
                     now,
                     tickCount,
-                    viewportHeight: innerConstraints.maxHeight,
                   ),
                 ),
               )
@@ -422,7 +437,6 @@ class _TodoTimelineState extends State<TodoTimeline>
                   timeFmt,
                   now,
                   tickCount,
-                  viewportHeight: timelineHeight ?? 400,
                 ),
               ),
           ],
@@ -437,31 +451,10 @@ class _TodoTimelineState extends State<TodoTimeline>
     DateFormat dateFmt,
     DateFormat timeFmt,
     DateTime now,
-    int tickCount, {
-    required double viewportHeight,
-  }) {
+    int tickCount,
+  ) {
     final isPinching = _pointerPositions.length >= 2;
-    final listView = ListView.builder(
-      controller: _scrollController,
-      physics: const BouncingScrollPhysics(),
-      itemCount: _daysCount,
-      itemExtent: _displayDayHeight,
-      itemBuilder: (context, dayIndex) => RepaintBoundary(
-        child: _buildDayRow(context, dayIndex, theme, dateFmt, now, tickCount),
-      ),
-    );
-    final content = _animatingToGranularityIndex != null &&
-            _pinchAnchorViewportY != null &&
-            viewportHeight > 0
-        ? Transform(
-            alignment: Alignment(
-              0,
-              (2 * (_pinchAnchorViewportY! / viewportHeight) - 1).clamp(-1.0, 1.0),
-            ),
-            transform: Matrix4.diagonal3Values(1, _scaleY, 1),
-            child: listView,
-          )
-        : listView;
+    final animationT = _animatingToGranularityIndex != null ? _granularityAnimationT : null;
     return Listener(
       key: _scrollContentKey,
       onPointerDown: _onPointerDown,
@@ -472,7 +465,23 @@ class _TodoTimelineState extends State<TodoTimeline>
         children: [
           AbsorbPointer(
             absorbing: isPinching,
-            child: content,
+            child: ListView.builder(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              itemCount: _daysCount,
+              itemExtent: _displayDayHeight,
+              itemBuilder: (context, dayIndex) => RepaintBoundary(
+                child: _buildDayRow(
+                  context,
+                  dayIndex,
+                  theme,
+                  dateFmt,
+                  now,
+                  tickCount,
+                  animationT: animationT,
+                ),
+              ),
+            ),
           ),
           if (_isSameDay(now, widget.today))
             Positioned(
@@ -480,18 +489,21 @@ class _TodoTimelineState extends State<TodoTimeline>
               right: 0,
               bottom: 8,
               child: Center(
-                child: Material(
-                  color: theme.colorScheme.surfaceContainerHigh.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(20),
-                  child: InkWell(
-                    onTap: _animateToNow,
+                child: Opacity(
+                  opacity: _textOpacityForTransition(animationT),
+                  child: Material(
+                    color: theme.colorScheme.surfaceContainerHigh.withOpacity(0.95),
                     borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        '当前 ${timeFmt.format(now)}',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.error,
+                    child: InkWell(
+                      onTap: _animateToNow,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: Text(
+                          '当前 ${timeFmt.format(now)}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
                         ),
                       ),
                     ),
@@ -504,7 +516,13 @@ class _TodoTimelineState extends State<TodoTimeline>
     );
   }
 
-  List<Widget> _buildTimeLabels(int tickCount, double tickHeight, ThemeData theme) {
+  /// 时间标签列：标签中心对准右侧刻度线（负 Y 偏移使中心对齐而非顶部对齐）
+  Widget _buildTimeLabels(
+    int tickCount,
+    double tickHeight,
+    ThemeData theme, {
+    double? animationT,
+  }) {
     const maxLabels = 24;
     final step = tickCount > maxLabels ? (tickCount / maxLabels).ceil() : 1;
     final count = (tickCount / step).ceil();
@@ -513,24 +531,40 @@ class _TodoTimelineState extends State<TodoTimeline>
       fontSize: 14,
       color: theme.colorScheme.onSurfaceVariant,
     );
-    return List.generate(count, (j) {
-      final i = j * step;
-      final min = i * _tickIntervalMinutes;
-      final h = min ~/ 60, m = min % 60;
-      return SizedBox(
-        height: labelHeight,
-        child: Align(
-          alignment: Alignment.topRight,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Text(
-              '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
-              style: textStyle,
+    final textOpacity = _textOpacityForTransition(animationT);
+    return SizedBox(
+      height: _displayDayHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: List.generate(count, (j) {
+          final i = j * step;
+          final min = i * _tickIntervalMinutes;
+          final h = min ~/ 60, m = min % 60;
+          // 刻度线在 j*step 处；标签中心对准该刻度，故 top = 刻度 y - 半高
+          final tickY = j * step * tickHeight;
+          final top = tickY - labelHeight / 2;
+          return Positioned(
+            left: 0,
+            right: 0,
+            top: top,
+            height: labelHeight,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Opacity(
+                  opacity: textOpacity,
+                  child: Text(
+                    '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+                    style: textStyle,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      );
-    });
+          );
+        }),
+      ),
+    );
   }
 
   Widget _buildDayRow(
@@ -539,13 +573,15 @@ class _TodoTimelineState extends State<TodoTimeline>
     ThemeData theme,
     DateFormat dateFmt,
     DateTime now,
-    int tickCount,
-  ) {
+    int tickCount, {
+    double? animationT,
+  }) {
     final day = widget.today.add(Duration(days: dayIndex - _todayIndex));
     final isToday = _isSameDay(now, day);
     final dayLabel = dayIndex == _todayIndex ? '今天' : dateFmt.format(day);
     final segments = _segmentsForDay(day);
     final tickHeight = _displayPixelsPerHour * (tickIntervalMinutesFor(_granularityIndex) / 60);
+    final textOpacity = _textOpacityForTransition(animationT);
     return SizedBox(
       height: _displayDayHeight,
       child: Row(
@@ -553,9 +589,7 @@ class _TodoTimelineState extends State<TodoTimeline>
         children: [
           SizedBox(
             width: 52,
-            child: Column(
-              children: _buildTimeLabels(tickCount, tickHeight, theme),
-            ),
+            child: _buildTimeLabels(tickCount, tickHeight, theme, animationT: animationT),
           ),
           const SizedBox(width: 4),
           Expanded(
@@ -574,11 +608,14 @@ class _TodoTimelineState extends State<TodoTimeline>
                 Positioned(
                   left: 0,
                   top: 4,
-                  child: Text(
-                    dayLabel,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                      fontSize: 13,
+                  child: Opacity(
+                    opacity: textOpacity,
+                    child: Text(
+                      dayLabel,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ),
@@ -601,19 +638,22 @@ class _TodoTimelineState extends State<TodoTimeline>
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           child: Align(
                             alignment: Alignment.topLeft,
-                            child: Text(
-                              s.item.title,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                shadows: [
-                                  Shadow(offset: Offset(0, 0.5), blurRadius: 1, color: Colors.black26),
-                                  Shadow(offset: Offset(0, 0.5), blurRadius: 2, color: Colors.black12),
-                                ],
+                            child: Opacity(
+                              opacity: textOpacity,
+                              child: Text(
+                                s.item.title,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: [
+                                    Shadow(offset: Offset(0, 0.5), blurRadius: 1, color: Colors.black26),
+                                    Shadow(offset: Offset(0, 0.5), blurRadius: 2, color: Colors.black12),
+                                  ],
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -633,11 +673,11 @@ class _TodoTimelineState extends State<TodoTimeline>
   Widget _buildNowLine(ThemeData theme) {
     final now = DateTime.now();
     final nowMinutes = _toMinutesOfDay(now);
-    final top = nowMinutes / 60 * _displayPixelsPerHour - 1;
+    final lineCenterY = nowMinutes / 60 * _displayPixelsPerHour;
     return Positioned(
       left: 0,
       right: 0,
-      top: top,
+      top: lineCenterY - 1,
       height: 2,
       child: IgnorePointer(
         child: Container(
@@ -658,13 +698,14 @@ class _TodoTimelineState extends State<TodoTimeline>
   Widget _buildNowDot(ThemeData theme) {
     final now = DateTime.now();
     final nowMinutes = _toMinutesOfDay(now);
-    final top = nowMinutes / 60 * _displayPixelsPerHour - 8;
+    final dotCenterY = nowMinutes / 60 * _displayPixelsPerHour;
+    const dotSize = 10.0;
     return Positioned(
       left: 0,
-      top: top,
+      top: dotCenterY - dotSize / 2,
       child: Container(
-        width: 10,
-        height: 10,
+        width: dotSize,
+        height: dotSize,
         decoration: BoxDecoration(
           color: theme.colorScheme.error,
           shape: BoxShape.circle,

@@ -16,16 +16,19 @@ class HourlyRecord {
 
   int get hourOfDay => hourStart.hour;
 
-  /// 展示用时间范围（支持整点 1 小时或开发模式 2 分钟槽）
-  String get displayTimeRange {
+  /// 展示用时间范围。[unitMinutes] 为统计单位（默认 20），开发模式 2 分钟槽仍按 2 分钟显示。
+  String displayTimeRange({int unitMinutes = 20}) {
     final h = hourStart.hour;
     final m = hourStart.minute;
     String pad(int n) => n < 10 ? '0$n' : '$n';
-    if (m == 0) {
-      return '${pad(h)}:00 - ${pad((h + 1) % 24)}:00';
+    if (m != 0 && m != 20 && m != 40) {
+      final endM = (m + 2) % 60;
+      final endH = (h + (m + 2) ~/ 60) % 24;
+      return '${pad(h)}:${pad(m)} - ${pad(endH)}:${pad(endM)}';
     }
-    final endM = (m + 2) % 60;
-    final endH = (h + (m + 2) ~/ 60) % 24;
+    final totalMin = h * 60 + m + unitMinutes;
+    final endH = (totalMin ~/ 60) % 24;
+    final endM = totalMin % 60;
     return '${pad(h)}:${pad(m)} - ${pad(endH)}:${pad(endM)}';
   }
 

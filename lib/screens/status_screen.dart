@@ -4,6 +4,7 @@ import '../constants/app_config.dart';
 import '../models/activity_state.dart';
 import '../models/hourly_record.dart';
 import '../services/dev_sample_data.dart';
+import '../services/settings_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/daily_chart.dart';
 
@@ -119,7 +120,7 @@ class _StatusScreenState extends State<StatusScreen> {
                                 ? Colors.orange
                                 : Colors.green,
                       ),
-                      title: Text(r.displayTimeRange),
+                      title: Text(r.displayTimeRange(unitMinutes: SettingsService.current.statUnitMinutes)),
                       subtitle: Text(r.state.displayName),
                     ),
                   );

@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../models/activity_state.dart';
 import '../models/hourly_record.dart';
+import '../services/settings_service.dart';
 
-/// 当日汇总：饼图（工作/休息/娱乐占比）+ 柱状图（24 小时分布）
+/// 当日汇总：饼图（工作/休息/娱乐占比，按统计单位计数）+ 柱状图（24 小时分布）
 class DailyChart extends StatelessWidget {
   final List<HourlyRecord> records;
   final DateTime date;
@@ -22,11 +23,15 @@ class DailyChart extends StatelessWidget {
     final entertainment =
         records.where((r) => r.state == ActivityState.entertainment).length;
     final total = records.length;
+    final unitMin = SettingsService.isInitialized
+        ? SettingsService.current.statUnitMinutes
+        : 20;
+    final unitLabel = unitMin == 60 ? '小时' : '单位';
     final sections = <PieChartSectionData>[];
     if (work > 0) {
       sections.add(PieChartSectionData(
         value: work.toDouble(),
-        title: '${work}h',
+        title: '$work${unitMin == 60 ? 'h' : '单'}',
         color: Colors.blue,
         radius: 48,
         titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
@@ -35,7 +40,7 @@ class DailyChart extends StatelessWidget {
     if (rest > 0) {
       sections.add(PieChartSectionData(
         value: rest.toDouble(),
-        title: '${rest}h',
+        title: '$rest${unitMin == 60 ? 'h' : '单'}',
         color: Colors.orange,
         radius: 48,
         titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
@@ -44,7 +49,7 @@ class DailyChart extends StatelessWidget {
     if (entertainment > 0) {
       sections.add(PieChartSectionData(
         value: entertainment.toDouble(),
-        title: '${entertainment}h',
+        title: '$entertainment${unitMin == 60 ? 'h' : '单'}',
         color: Colors.green,
         radius: 48,
         titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
@@ -64,7 +69,7 @@ class DailyChart extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             child: Center(
               child: Text(
-                '今日暂无记录，整点会提示填写上一小时状态',
+                '今日暂无记录，整点会提示填写上一时段状态',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -97,15 +102,15 @@ class DailyChart extends StatelessWidget {
                     children: [
                       _LegendItem(
                         color: Colors.blue,
-                        label: '工作 $work 小时',
+                        label: '工作 $work $unitLabel${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
                       ),
                       _LegendItem(
                         color: Colors.orange,
-                        label: '休息 $rest 小时',
+                        label: '休息 $rest $unitLabel${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
                       ),
                       _LegendItem(
                         color: Colors.green,
-                        label: '娱乐 $entertainment 小时',
+                        label: '娱乐 $entertainment $unitLabel${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
                       ),
                     ],
                   ),

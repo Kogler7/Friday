@@ -5,7 +5,27 @@ import '../models/activity_state.dart';
 import '../models/hourly_record.dart';
 import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
+import '../services/settings_service.dart';
 import '../services/storage_service.dart';
+
+void _saveIntervalAndCancel(DateTime intervalStart, ActivityState state) {
+  final intervalMin = SettingsService.isInitialized
+      ? SettingsService.current.reminderIntervalMinutes
+      : 60;
+  if (kDebugMode) {
+    StorageService.saveRecord(
+      HourlyRecord(hourStart: intervalStart, state: state),
+    );
+    NotificationService.cancelForSlot(intervalStart);
+    return;
+  }
+  StorageService.saveRecordsForInterval(
+    intervalStart,
+    Duration(minutes: intervalMin),
+    state,
+  );
+  NotificationService.cancelForSlot(intervalStart);
+}
 
 /// 每小时/每时段弹出的状态选择对话框。
 /// [hourStart] 为要记录的时段开始时间（正式：整点如 14:00；开发：2 分钟槽如 14:30）。
@@ -35,14 +55,15 @@ void showHourlyPromptDialog(
       hourStart: slot,
       timeoutMinutes: timeout,
       onSelected: (state) {
-        StorageService.saveRecord(HourlyRecord(hourStart: slot, state: state));
-        NotificationService.cancelForSlot(slot);
+        _saveIntervalAndCancel(slot, state);
         HourlyPromptService.markDialogClosed();
         Navigator.of(ctx).pop();
       },
       onTimeout: () {
-        StorageService.saveRecord(HourlyRecord(hourStart: slot, state: ActivityState.resting));
-        NotificationService.cancelForSlot(slot);
+        final defaultState = SettingsService.isInitialized
+            ? SettingsService.current.quietPeriodDefaultState
+            : ActivityState.resting;
+        _saveIntervalAndCancel(slot, defaultState);
         HourlyPromptService.markDialogClosed();
         if (ctx.mounted) Navigator.of(ctx).pop();
         onTimeout?.call();

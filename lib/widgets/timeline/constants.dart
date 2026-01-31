@@ -5,7 +5,7 @@ const List<int> kDiscreteTickMinutes = [10, 20, 30, 60, 90, 120, 180, 240];
 const int kDefaultGranularityIndex = 3;
 
 /// 时间轴每刻度像素高度
-const double kPixelsPerTick = 32.0;
+const double kPixelsPerTick = 40.0;
 
 /// 停止滑动后多久自动归位到当前时刻
 const Duration kRecenterDelay = Duration(milliseconds: 2500);

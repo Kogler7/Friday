@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'notification_service.dart';
+import 'settings_service.dart';
 import 'storage_service.dart';
 
-/// 每小时整点检查：若上一小时尚未记录，则通过 [onShowPrompt] 请求弹窗。
+/// 按设置间隔检查：若上一间隔尚未记录则弹窗或静默时段内自动填休息。
 /// 开发模式下改为每 2 分钟触发一次，便于测试。
 class HourlyPromptService {
   HourlyPromptService._();
@@ -43,16 +44,31 @@ class HourlyPromptService {
     }
   }
 
-  /// 正式：整点后前 10 分钟内检查上一小时
+  /// 正式：整点后前 10 分钟内检查上一间隔；静默时段内不提醒并自动填默认状态
   static void _runProdCheck() {
     final now = DateTime.now();
-    final currentHourStart = DateTime(now.year, now.month, now.day, now.hour);
+    final intervalMin = SettingsService.isInitialized
+        ? SettingsService.current.reminderIntervalMinutes
+        : 60;
+    final currentHourStart = DateTime(now.year, now.month, now.day, now.hour, 0, 0, 0);
+    // 仅在前 10 分钟内检查上一间隔
     if (now.minute >= 10) return;
-    final hourToRecord = currentHourStart.subtract(const Duration(hours: 1));
-    if (StorageService.getRecordForHour(hourToRecord) != null) return;
+    final intervalStartToRecord =
+        currentHourStart.subtract(Duration(minutes: intervalMin));
+    final length = Duration(minutes: intervalMin);
+    if (StorageService.hasRecordForInterval(intervalStartToRecord, length)) return;
     if (_dialogShowing) return;
-    NotificationService.showHourlyPrompt(hourToRecord);
-    _onShowPrompt?.call(hourToRecord);
+    if (SettingsService.isInitialized &&
+        SettingsService.current.isSlotInQuietPeriod(intervalStartToRecord)) {
+      StorageService.saveRecordsForInterval(
+        intervalStartToRecord,
+        length,
+        SettingsService.current.quietPeriodDefaultState,
+      );
+      return;
+    }
+    NotificationService.showHourlyPrompt(intervalStartToRecord);
+    _onShowPrompt?.call(intervalStartToRecord);
   }
 
   /// 开发：每 2 分钟一个槽，当前时间所在 2 分钟块的前一块为「待记录槽」
@@ -71,6 +87,15 @@ class HourlyPromptService {
     if (StorageService.getRecordForHour(slotToRecord) != null) return;
     if (_dialogShowing) return;
     if (_lastShownSlot != null && _lastShownSlot == slotToRecord) return;
+    if (SettingsService.isInitialized &&
+        SettingsService.current.isSlotInQuietPeriod(slotToRecord)) {
+      StorageService.saveRecordsForInterval(
+        slotToRecord,
+        const Duration(minutes: 2),
+        SettingsService.current.quietPeriodDefaultState,
+      );
+      return;
+    }
     _lastShownSlot = slotToRecord;
     NotificationService.showHourlyPrompt(slotToRecord);
     _onShowPrompt?.call(slotToRecord);

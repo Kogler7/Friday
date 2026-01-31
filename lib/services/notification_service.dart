@@ -3,6 +3,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'settings_service.dart';
+
 /// 系统通知服务：高优先级渠道，前台/后台均弹窗；整点定时 + 即时推送；点击打开应用并弹出问卷。
 class NotificationService {
   NotificationService._();
@@ -222,7 +224,7 @@ class NotificationService {
     }
   }
 
-  /// 安排接下来 24 个整点的定时通知（后台到点也会由系统弹出）。
+  /// 安排接下来 24 个整点的定时通知（后台到点也会由系统弹出）；静默时段不安排。
   /// 每次调用前会 [cancelAll]，因此不会因多次重启而堆积。
   static Future<void> scheduleHourlyPrompts() async {
     if (!_initialized) return;
@@ -230,6 +232,7 @@ class NotificationService {
     final now = DateTime.now();
     final local = tz.TZDateTime.from(now, tz.local);
     String pad(int n) => n < 10 ? '0$n' : '$n';
+    int idBase = 1000;
     for (int i = 0; i < 24; i++) {
       final totalHours = local.hour + 1 + i;
       final dayOffset = totalHours ~/ 24;
@@ -243,6 +246,17 @@ class NotificationService {
         0,
         0,
       );
+      final scheduledDt = DateTime(
+        scheduled.year,
+        scheduled.month,
+        scheduled.day,
+        scheduled.hour,
+        scheduled.minute,
+      );
+      if (SettingsService.isInitialized &&
+          SettingsService.current.isInQuietPeriod(scheduledDt)) {
+        continue;
+      }
       final prev = scheduled.subtract(const Duration(hours: 1));
       final hourToRecord = DateTime(
         prev.year,
@@ -265,7 +279,7 @@ class NotificationService {
         ),
       );
       await _plugin.zonedSchedule(
-        id: 1000 + i,
+        id: idBase++,
         title: '过去一小时你在做什么？',
         body: '${pad(hourToRecord.hour)}:00 请选择：工作 / 休息 / 娱乐',
         scheduledDate: scheduled,
