@@ -13,13 +13,49 @@ void main() {
   runApp(const PlanPlusApp());
 }
 
-class PlanPlusApp extends StatelessWidget {
+/// 根组件：监听用户开发者模式与生命周期，切后台或重启时退出开发者模式；仅在开发者模式下显示 debug banner。
+class PlanPlusApp extends StatefulWidget {
   const PlanPlusApp({super.key});
+
+  @override
+  State<PlanPlusApp> createState() => _PlanPlusAppState();
+}
+
+class _PlanPlusAppState extends State<PlanPlusApp> with WidgetsBindingObserver {
+  bool _userDevMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    userDeveloperMode.addListener(_onUserDevModeChanged);
+  }
+
+  @override
+  void dispose() {
+    userDeveloperMode.removeListener(_onUserDevModeChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _onUserDevModeChanged() {
+    if (mounted) setState(() => _userDevMode = userDeveloperMode.value);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      exitUserDeveloperMode();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PlanPlus',
+      debugShowCheckedModeBanner: kIsDevMode && _userDevMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,

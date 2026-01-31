@@ -38,6 +38,7 @@ dependencies:
   flutter_local_notifications: ^20.0.0
   timezone: ^0.10.0
   share_plus: ^10.0.0
+  local_auth: ^2.3.0
 
 dev_dependencies:
   flutter_test:

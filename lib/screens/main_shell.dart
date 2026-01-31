@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../constants/app_config.dart';
+import '../services/dev_mode_auth_service.dart';
 import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/hourly_prompt_dialog.dart';
@@ -21,6 +25,9 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  int _aboutTapCount = 0;
+  Timer? _aboutTapTimer;
+  Timer? _aboutOpenTimer;
 
   static const List<_NavItem> _items = [
     _NavItem(label: '事件', icon: Icons.event_note),
@@ -65,8 +72,52 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _aboutTapTimer?.cancel();
+    _aboutOpenTimer?.cancel();
     HourlyPromptService.stop();
     super.dispose();
+  }
+
+  Future<void> _onAboutTap() async {
+    _aboutTapCount++;
+    if (_aboutTapCount >= 5) {
+      _aboutTapCount = 0;
+      _aboutTapTimer?.cancel();
+      _aboutOpenTimer?.cancel();
+      if (!mounted) return;
+      Navigator.pop(context);
+      final verified = await DevModeAuthService.authenticate(
+        reason: '验证身份以进入开发者模式',
+      );
+      if (!mounted) return;
+      if (verified) {
+        enterUserDeveloperMode();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已进入开发者模式')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('验证未通过，未进入开发者模式')),
+        );
+      }
+      return;
+    }
+    _aboutTapTimer?.cancel();
+    _aboutTapTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _aboutTapCount = 0);
+    });
+    if (_aboutTapCount == 1) {
+      _aboutOpenTimer?.cancel();
+      _aboutOpenTimer = Timer(const Duration(milliseconds: 300), () {
+        if (!mounted || _aboutTapCount != 1) return;
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (context) => const AboutScreen()),
+        );
+        _aboutTapCount = 0;
+      });
+    }
   }
 
   @override
@@ -125,31 +176,34 @@ class _MainShellState extends State<MainShell> {
                   ],
                 ),
               ),
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: const Text('设置'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (context) => const SettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('关于'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (context) => const AboutScreen(),
-                    ),
-                  );
-                },
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Card(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.settings_outlined),
+                        title: const Text('设置'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (context) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('关于'),
+                        onTap: _onAboutTap,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
