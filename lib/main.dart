@@ -9,8 +9,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.init();
   await NotificationService.init();
-  // 仅正式模式预约 24 条整点通知；开发模式不预约，避免堆积，改为每 2 分钟弹窗
-  if (!kIsDevMode) {
+  if (kIsDevMode) {
+    await NotificationService.scheduleDevModePrompts();
+  } else {
     await NotificationService.scheduleHourlyPrompts();
   }
   runApp(const PlanPlusApp());

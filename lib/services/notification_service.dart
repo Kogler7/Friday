@@ -85,18 +85,46 @@ class NotificationService {
     } catch (_) {}
   }
 
-  /// 立即显示一条「上一小时状态」通知（前台也会弹系统横幅，类似微信）
+  /// 与 StorageService 一致：正式整点、开发 2 分钟槽
+  static DateTime _normalizeSlot(DateTime slot) {
+    if (kDebugMode) {
+      final m = slot.minute - (slot.minute % 2);
+      return DateTime(
+        slot.year,
+        slot.month,
+        slot.day,
+        slot.hour,
+        m,
+        0,
+        0,
+      );
+    }
+    return DateTime(
+      slot.year,
+      slot.month,
+      slot.day,
+      slot.hour,
+      0,
+      0,
+      0,
+    );
+  }
+
+  static int _idForSlot(DateTime slot) {
+    final n = _normalizeSlot(slot);
+    return n.millisecondsSinceEpoch ~/ 1000 % 0x7FFFFFFF;
+  }
+
+  /// 立即显示一条「上一小时/上一时段状态」通知（前台也会弹系统横幅）
   static Future<void> showHourlyPrompt(DateTime hourToRecord) async {
     if (!_initialized) return;
-    final normalized = DateTime(
-      hourToRecord.year,
-      hourToRecord.month,
-      hourToRecord.day,
-      hourToRecord.hour,
-    );
+    final normalized = _normalizeSlot(hourToRecord);
     final h = normalized.hour;
-    final next = (h + 1) % 24;
+    final m = normalized.minute;
     String pad(int n) => n < 10 ? '0$n' : '$n';
+    final body = m == 0
+        ? '${pad(h)}:00 - ${pad((h + 1) % 24)}:00 请选择：工作 / 休息 / 娱乐'
+        : '${pad(h)}:${pad(m)} - ${pad((h + (m + 2) ~/ 60) % 24)}:${pad((m + 2) % 60)} 请选择：工作 / 休息 / 娱乐';
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,
@@ -111,14 +139,87 @@ class NotificationService {
         presentSound: true,
       ),
     );
-    final id = normalized.millisecondsSinceEpoch ~/ 1000 % 0x7FFFFFFF;
     await _plugin.show(
-      id: id,
+      id: _idForSlot(normalized),
       title: '过去一小时你在做什么？',
-      body: '${pad(h)}:00 - ${pad(next)}:00 请选择：工作 / 休息 / 娱乐',
+      body: body,
       notificationDetails: details,
       payload: normalized.toIso8601String(),
     );
+  }
+
+  /// 问卷填写/超时后移除对应时段的通知
+  static Future<void> cancelForSlot(DateTime slot) async {
+    if (!_initialized) return;
+    await _plugin.cancel(id: _idForSlot(slot));
+  }
+
+  /// 开发模式：安排接下来约 60 分钟内每 2 分钟的定时通知（后台到点也会由系统弹出）。
+  static Future<void> scheduleDevModePrompts() async {
+    if (!_initialized || !kDebugMode) return;
+    await _plugin.cancelAll();
+    final now = DateTime.now();
+    final local = tz.TZDateTime.from(now, tz.local);
+    String pad(int n) => n < 10 ? '0$n' : '$n';
+    // 下一个 2 分钟整点（如 14:31 → 14:32）
+    final nextMin = ((local.minute ~/ 2) + 1) * 2;
+    final start = nextMin >= 60
+        ? tz.TZDateTime(
+            local.location,
+            local.year,
+            local.month,
+            local.day,
+            local.hour + 1,
+            0,
+            0,
+            0,
+          )
+        : tz.TZDateTime(
+            local.location,
+            local.year,
+            local.month,
+            local.day,
+            local.hour,
+            nextMin,
+            0,
+            0,
+          );
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: '每小时提醒填写上一小时状态',
+        importance: Importance.high,
+        priority: Priority.high,
+        ticker: '过去一小时你在做什么？',
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+      ),
+    );
+    for (var i = 0; i < 30; i++) {
+      final scheduled = start.add(Duration(minutes: i * 2));
+      final slotToRecord = scheduled.subtract(const Duration(minutes: 2));
+      final hourToRecord = DateTime(
+        slotToRecord.year,
+        slotToRecord.month,
+        slotToRecord.day,
+        slotToRecord.hour,
+        slotToRecord.minute,
+        0,
+        0,
+      );
+      await _plugin.zonedSchedule(
+        id: _idForSlot(hourToRecord),
+        title: '过去一小时你在做什么？',
+        body: '${pad(hourToRecord.hour)}:${pad(hourToRecord.minute)} 请选择：工作 / 休息 / 娱乐',
+        scheduledDate: scheduled,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: _normalizeSlot(hourToRecord).toIso8601String(),
+      );
+    }
   }
 
   /// 安排接下来 24 个整点的定时通知（后台到点也会由系统弹出）。
@@ -169,7 +270,7 @@ class NotificationService {
         body: '${pad(hourToRecord.hour)}:00 请选择：工作 / 休息 / 娱乐',
         scheduledDate: scheduled,
         notificationDetails: details,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         payload: hourToRecord.toIso8601String(),
       );
     }

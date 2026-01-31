@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/activity_state.dart';
 import '../models/hourly_record.dart';
 import '../services/hourly_prompt_service.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 
 /// 每小时/每时段弹出的状态选择对话框。
@@ -35,11 +36,13 @@ void showHourlyPromptDialog(
       timeoutMinutes: timeout,
       onSelected: (state) {
         StorageService.saveRecord(HourlyRecord(hourStart: slot, state: state));
+        NotificationService.cancelForSlot(slot);
         HourlyPromptService.markDialogClosed();
         Navigator.of(ctx).pop();
       },
       onTimeout: () {
         StorageService.saveRecord(HourlyRecord(hourStart: slot, state: ActivityState.resting));
+        NotificationService.cancelForSlot(slot);
         HourlyPromptService.markDialogClosed();
         if (ctx.mounted) Navigator.of(ctx).pop();
         onTimeout?.call();
