@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_config.dart';
-import '../models/activity_state.dart';
-import '../models/hourly_record.dart';
+import '../models/activity/activity_state.dart';
+import '../models/activity/hourly_record.dart';
 import '../services/dev_sample_data.dart';
 import '../services/settings_service.dart';
 import '../services/storage_service.dart';

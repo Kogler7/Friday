@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/activity_state.dart';
-import '../models/settings_preferences.dart';
+import '../models/activity/activity_state.dart';
+import '../models/settings/settings_preferences.dart';
 import '../services/settings_service.dart';
 
 /// 状态统计与提醒设置页（入口：主页右上角）

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/chat_message.dart';
+import '../models/idea/chat_message.dart';
 
 const String _keyChat = 'planplus_chat';
 

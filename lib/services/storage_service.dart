@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/activity_state.dart';
-import '../models/hourly_record.dart';
+import '../models/activity/activity_state.dart';
+import '../models/activity/hourly_record.dart';
 import 'settings_service.dart';
 
 const String _keyPrefix = 'planplus_hourly_';

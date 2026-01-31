@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../models/chat_message.dart';
+import '../models/idea/chat_message.dart';
 import '../services/chat_storage_service.dart';
 import '../widgets/chat_export_sheet.dart';
 

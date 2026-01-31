@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/todo_item.dart';
+import '../models/event/todo_item.dart';
 
 const String _keyTodo = 'planplus_todo';
 

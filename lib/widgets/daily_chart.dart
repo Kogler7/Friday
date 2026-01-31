@@ -1,8 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../models/activity_state.dart';
-import '../models/hourly_record.dart';
+import '../models/activity/activity_state.dart';
+import '../models/activity/hourly_record.dart';
 import '../services/settings_service.dart';
 
 /// 当日汇总：饼图（工作/休息/娱乐占比，按统计单位计数）+ 柱状图（24 小时分布）

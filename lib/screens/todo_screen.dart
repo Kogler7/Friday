@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/app_config.dart';
-import '../models/todo_item.dart';
+import '../models/event/todo_item.dart';
 import '../services/dev_todo_sample.dart';
 import '../services/todo_storage_service.dart';
 import '../widgets/todo_edit_sheet.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../models/todo_item.dart';
+import '../../models/event/todo_item.dart';
 
 /// 单日时间轴上一段要绘制的区间
 class TimelineSegment {

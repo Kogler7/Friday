@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../models/activity_state.dart';
-import '../models/hourly_record.dart';
+import '../models/activity/activity_state.dart';
+import '../models/activity/hourly_record.dart';
 import 'storage_service.dart';
 
 /// 开发阶段示例数据：仅 [kDebugMode] 下可用。

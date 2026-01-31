@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'activity_state.dart';
+import '../activity/activity_state.dart';
 
 /// 状态统计与提醒相关设置（可扩展，后期支持批量修改）
 class SettingsPreferences {

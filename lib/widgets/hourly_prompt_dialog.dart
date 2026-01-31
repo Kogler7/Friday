@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../models/activity_state.dart';
-import '../models/hourly_record.dart';
+import '../models/activity/activity_state.dart';
+import '../models/activity/hourly_record.dart';
 import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';

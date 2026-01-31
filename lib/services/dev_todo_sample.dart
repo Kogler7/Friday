@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../models/todo_item.dart';
+import '../models/event/todo_item.dart';
 
 /// 开发阶段待办示例数据：仅 [kDebugMode] 下用于时间轴/列表演示。
 class DevTodoSample {

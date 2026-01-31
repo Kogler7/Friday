@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/activity_state.dart';
-import '../models/settings_preferences.dart';
+import '../models/activity/activity_state.dart';
+import '../models/settings/settings_preferences.dart';
 
 const String _keySettings = 'planplus_settings';
 

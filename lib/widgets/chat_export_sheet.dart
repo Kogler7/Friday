@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/chat_message.dart';
+import '../models/idea/chat_message.dart';
 
 /// 按日期范围选择聊天记录，拼接为文本，支持复制或导出（分享）
 class ChatExportSheet extends StatefulWidget {

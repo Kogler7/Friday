@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 
-import '../../models/todo_item.dart';
+import '../../models/event/todo_item.dart';
 import 'constants.dart';
 import 'models.dart';
 import 'painters.dart';
