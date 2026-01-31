@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'constants/app_config.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
+import 'services/chat_storage_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.init();
+  await ChatStorageService.init();
   await NotificationService.init();
   if (kIsDevMode) {
     await NotificationService.scheduleDevModePrompts();
@@ -28,7 +30,7 @@ class PlanPlusApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const MainShell(),
     );
   }
 }
