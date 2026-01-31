@@ -1,5 +1,7 @@
 {
     "cSpell.words": [
         "planplus"
-    ]
+    ],
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "cmake.sourceDirectory": "D:/Projects/Planplus/planplus/linux"
 }
