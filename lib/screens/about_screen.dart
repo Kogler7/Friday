@@ -1,8 +1,44 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-/// 关于页：应用简介与版本信息
-class AboutScreen extends StatelessWidget {
-  const AboutScreen({super.key});
+class AboutScreen extends StatefulWidget {
+  const AboutScreen({
+    super.key,
+    this.onDevModeTriggerRequest,
+  });
+
+  final Future<void> Function()? onDevModeTriggerRequest;
+
+  @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  int _versionTapCount = 0;
+  Timer? _versionTapTimer;
+
+  @override
+  void dispose() {
+    _versionTapTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _onVersionTap() async {
+    _versionTapCount++;
+    if (_versionTapCount >= 5) {
+      _versionTapCount = 0;
+      _versionTapTimer?.cancel();
+      if (!mounted) return;
+      Navigator.pop(context);
+      await widget.onDevModeTriggerRequest?.call();
+      return;
+    }
+    _versionTapTimer?.cancel();
+    _versionTapTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _versionTapCount = 0);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,12 +87,19 @@ class AboutScreen extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(
-                '版本 1.0.0',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+              GestureDetector(
+                onTap: _onVersionTap,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    '版本 1.0.0',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),

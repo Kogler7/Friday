@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../../constants/app_config.dart' show userDeveloperMode;
 import '../../models/idea/chat_message.dart';
 import '../../models/idea/idea_session.dart';
-import '../../services/dev_mode_auth_service.dart';
+import '../../services/local_auth_service.dart';
 import '../../services/idea_session_storage.dart';
 import 'idea_bubble.dart';
 import 'idea_export_sheet.dart';
@@ -182,10 +182,10 @@ class _IdeaScreenState extends State<IdeaScreen>
 
   Future<void> _switchToSession(IdeaSession session) async {
     if (session.isLocked) {
-      final result = await DevModeAuthService.authenticate(
+      final result = await LocalAuthService.authenticate(
         reason: '验证身份以查看该会话',
       );
-      if (result == DevModeAuthResult.failed) {
+      if (result == LocalAuthResult.failed) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('验证未通过，无法打开该会话')),

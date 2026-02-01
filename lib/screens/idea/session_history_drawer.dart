@@ -3,8 +3,10 @@ import 'package:intl/intl.dart';
 
 import '../../common/slidable_action_tile.dart';
 import '../../models/idea/idea_session.dart';
+import '../../services/local_auth_service.dart';
 import '../../services/idea_session_storage.dart';
 import 'delete_confirm_dialog.dart';
+import 'session_edit_constants.dart';
 import 'session_edit_sheet.dart';
 import 'session_list_entry.dart';
 
@@ -49,6 +51,19 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
   }
 
   Future<void> _onLock(IdeaSession session) async {
+    if (session.isLocked) {
+      final result = await LocalAuthService.authenticate(
+        reason: '验证身份以解锁该会话',
+      );
+      if (result == LocalAuthResult.failed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('验证未通过，无法解锁')),
+          );
+        }
+        return;
+      }
+    }
     final updated = session.copyWith(isLocked: !session.isLocked);
     await IdeaSessionStorage.saveSession(updated);
     _refresh();
@@ -256,12 +271,11 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                         final subtitle =
                             DateFormat('MM-dd HH:mm').format(session.updatedAt);
                         final isLocked = session.isLocked;
-                        final leadingIcon = session.iconCodePoint != null
-                            ? IconData(
-                                session.iconCodePoint!,
-                                fontFamily: 'MaterialIcons',
-                              )
-                            : Icons.chat_bubble_outline;
+                        final isCurrent = session.id == widget.currentSessionId;
+                        final leadingIcon = sessionIconForDisplay(
+                          session.iconCodePoint,
+                          isCurrent: isCurrent,
+                        );
                         final leadingColor = session.colorValue != null
                             ? Color(session.colorValue!)
                             : (session.isHidden && widget.isDevMode
@@ -297,7 +311,6 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                                   top: 0,
                                   bottom: 4,
                                 ),
-                                selected: session.id == widget.currentSessionId,
                                 leading: Icon(
                                   leadingIcon,
                                   size: 22,
