@@ -69,35 +69,37 @@ class _StatusScreenState extends State<StatusScreen> {
         tooltip: '批量设置',
         onPressed: () => showBatchSetSheet(context, _load),
       ),
-      if (kDebugMode)
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert),
-          onSelected: (v) async {
-            if (v == 'fill_sample') {
-              await DevSampleData.insertSampleData();
-              _load();
-              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已填充示例')));
-            } else if (v == 'clear_range' || v == 'clear_all') {
-              await _clearData(v);
-            } else if (v == 'data_switch') {
-              StatusDataSource.useTestData.value = !StatusDataSource.useTestData.value;
-              if (StatusDataSource.isTestData) {
-                await StatusPresetStorage.ensureBuiltInPresets();
-              }
-              _load();
+      PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        onSelected: (v) async {
+          if (v == 'fill_sample') {
+            await DevSampleData.insertSampleData();
+            _load();
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已填充示例')));
+          } else if (v == 'clear_range' || v == 'clear_all') {
+            await _clearData(v);
+          } else if (v == 'data_switch') {
+            StatusDataSource.useTestData.value = !StatusDataSource.useTestData.value;
+            if (StatusDataSource.isTestData) {
+              await StatusPresetStorage.ensureBuiltInPresets();
             }
-          },
-          itemBuilder: (_) {
-            final items = <PopupMenuEntry<String>>[
+            _load();
+          }
+        },
+        itemBuilder: (_) {
+          final items = <PopupMenuEntry<String>>[
+            const PopupMenuItem(value: 'clear_range', child: Text('清空时间范围')),
+            const PopupMenuItem(value: 'clear_all', child: Text('全部清空')),
+            if (kDebugMode) ...[
+              const PopupMenuDivider(),
               if (StatusDataSource.isTestData)
                 const PopupMenuItem(value: 'fill_sample', child: Text('填充示例数据')),
-              const PopupMenuItem(value: 'clear_range', child: Text('清空时间范围')),
-              const PopupMenuItem(value: 'clear_all', child: Text('全部清空')),
               const PopupMenuItem(value: 'data_switch', child: Text('切换数据源')),
-            ];
-            return items;
-          },
-        ),
+            ],
+          ];
+          return items;
+        },
+      ),
     ];
   }
 
