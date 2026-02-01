@@ -1,16 +1,61 @@
-# planplus
+# PlanPlus
 
-A new Flutter project.
+任务与状态规划应用。记录想法、管理事件、统计状态，让时间更有条理。
 
-## Getting Started
+## 功能概览
 
-This project is a starting point for a Flutter application.
+### 事件
+- 待办任务管理，支持时间轴与列表双视图
+- 左滑切换至事件列表，右滑展开日期标签
+- 支持截止日期、提醒时间、日程时段
+- 筛选：全部 / 进行中 / 已完成
 
-A few resources to get you started if this is your first Flutter project:
+### 状态
+- 按日查看工作 / 休息 / 娱乐时间分布
+- 饼图与小时明细展示
+- 每小时定时提醒记录上一时段状态
+- 超时未选自动记为休息
+- 静默时段（如睡眠时间）可配置不提醒
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### 想法
+- 多会话想法笔记，聊天气泡式界面
+- 右侧抽屉管理会话历史
+- 多选消息导出：复制或分享
+- 导出格式：每条「时间 + 内容」或多条拼接
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 智能
+- 中间入口占位，后续接入智能体 / 语音
+
+### 统计
+- 全局信息汇总，敬请期待
+
+### 设置
+- 主题：浅色 / 深色 / 跟随系统
+- 主题色：7 种可选
+- 统计单位：15 / 20 / 30 / 60 分钟
+- 提醒间隔：30 / 60 分钟
+- 静默时段：开始 / 结束时间，未记录时默认状态
+
+### 关于
+- 版本信息
+
+## 技术栈
+
+- Flutter
+- shared_preferences（本地存储）
+- fl_chart（图表）
+- flutter_local_notifications（本地通知）
+- local_auth（生物识别）
+- share_plus（分享）
+- intl（日期时间格式化）
+
+## 运行
+
+```bash
+flutter pub get
+flutter run
+```
+
+## 平台支持
+
+Android、iOS、Windows、Web、Linux、macOS
