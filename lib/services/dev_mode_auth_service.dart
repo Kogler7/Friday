@@ -1,8 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 
+/// 认证结果：成功、跳过（设备未配置/不支持）、失败（用户取消或验证失败）
+enum DevModeAuthResult {
+  success,
+  skipped,
+  failed,
+}
+
 /// 进入开发者模式前的身份验证：生物识别（指纹/人脸）或设备 PIN/图案。
-/// 若设备不支持则跳过验证。
+/// 若设备不支持或未配置则跳过验证。
 class DevModeAuthService {
   DevModeAuthService._();
 
@@ -17,17 +24,19 @@ class DevModeAuthService {
     }
   }
 
-  /// 执行验证。返回 true 表示通过或跳过（设备不支持）；false 表示用户取消或失败。
+  /// 执行验证。返回 [DevModeAuthResult]：成功、跳过、失败。
   /// [reason] 展示给用户的验证原因。
-  /// 支持时使用生物识别或设备 PIN/图案；不支持时跳过，仅限机主可进入开发者模式。
-  static Future<bool> authenticate({String reason = '验证身份以进入开发者模式'}) async {
+  /// 支持且已配置时弹出生物识别/PIN 界面；不支持或未配置时跳过。
+  static Future<DevModeAuthResult> authenticate({
+    String reason = '验证身份以进入开发者模式',
+  }) async {
     try {
       final supported = await _auth.isDeviceSupported();
       if (!supported) {
         if (kDebugMode) {
           debugPrint('DevModeAuth: 设备不支持本地认证，跳过验证');
         }
-        return true;
+        return DevModeAuthResult.skipped;
       }
 
       final success = await _auth.authenticate(
@@ -37,12 +46,20 @@ class DevModeAuthService {
           stickyAuth: true,
         ),
       );
-      return success;
+      return success ? DevModeAuthResult.success : DevModeAuthResult.failed;
     } on Exception catch (e) {
       if (kDebugMode) {
         debugPrint('DevModeAuth: 验证异常 $e');
       }
-      return false;
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('notavailable') ||
+          msg.contains('passcode') ||
+          msg.contains('lock') ||
+          msg.contains('enrolled') ||
+          msg.contains('no biometric')) {
+        return DevModeAuthResult.skipped;
+      }
+      return DevModeAuthResult.failed;
     }
   }
 }

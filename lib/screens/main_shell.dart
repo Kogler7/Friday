@@ -86,18 +86,28 @@ class _MainShellState extends State<MainShell> {
       _aboutOpenTimer?.cancel();
       if (!mounted) return;
       Navigator.pop(context);
-      final verified = await DevModeAuthService.authenticate(
+      final result = await DevModeAuthService.authenticate(
         reason: '验证身份以进入开发者模式',
       );
       if (!mounted) return;
-      if (verified) {
+      if (result == DevModeAuthResult.success) {
         enterUserDeveloperMode();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已进入开发者模式')),
         );
+      } else if (result == DevModeAuthResult.skipped) {
+        enterUserDeveloperMode();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('设备未配置生物识别/锁屏，已跳过验证进入开发者模式'),
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('验证未通过，未进入开发者模式')),
+          const SnackBar(
+            content: Text('验证未通过。请确保设备已录入指纹/人脸或已设置锁屏密码。'),
+            duration: Duration(seconds: 4),
+          ),
         );
       }
       return;
@@ -108,7 +118,7 @@ class _MainShellState extends State<MainShell> {
     });
     if (_aboutTapCount == 1) {
       _aboutOpenTimer?.cancel();
-      _aboutOpenTimer = Timer(const Duration(milliseconds: 300), () {
+      _aboutOpenTimer = Timer(const Duration(milliseconds: 200), () {
         if (!mounted || _aboutTapCount != 1) return;
         Navigator.pop(context);
         Navigator.push(
