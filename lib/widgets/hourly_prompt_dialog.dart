@@ -134,8 +134,8 @@ class _HourlyPromptSheetState extends State<_HourlyPromptSheet> {
       builder: (ctx) => StatusRecordFormSheet(
         initialData: const StatusRecordData(),
         onSubmit: (data) {
-          widget.onSelected(data);
           Navigator.of(ctx).pop();
+          widget.onSelected(data);
         },
         onCancel: () => Navigator.of(ctx).pop(),
       ),

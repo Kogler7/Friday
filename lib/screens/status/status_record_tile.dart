@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../models/activity/hourly_record.dart';
 import '../../services/activity_tag_storage.dart';
-import '../../services/settings_service.dart';
 
-/// 状态页小时记录卡片：时间范围、摘要
+/// 状态页小时记录卡片：时间轴式布局，左侧时间右侧内容
 class StatusRecordTile extends StatelessWidget {
   final HourlyRecord record;
+  final bool selectionMode;
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -14,6 +14,7 @@ class StatusRecordTile extends StatelessWidget {
   const StatusRecordTile({
     super.key,
     required this.record,
+    this.selectionMode = false,
     this.selected = false,
     this.onTap,
     this.onLongPress,
@@ -25,22 +26,62 @@ class StatusRecordTile extends StatelessWidget {
     final tagIds = r.data.tagIds;
     final primaryTagId = tagIds.isNotEmpty ? tagIds.first : '';
     final primaryTag = primaryTagId.isEmpty ? '—' : (ActivityTagStorage.getByName(primaryTagId)?.name ?? primaryTagId);
+    final h = r.hourStart.hour;
+    final m = r.hourStart.minute;
+    String pad(int n) => n < 10 ? '0$n' : '$n';
+    final timeStr = '${pad(h)}:${pad(m)}';
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
       color: selected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3) : null,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _colorForTag(primaryTag).withValues(alpha: 0.3),
-          child: Icon(
-            _iconForTag(primaryTag),
-            color: _colorForTag(primaryTag),
-            size: 24,
-          ),
-        ),
-        title: Text(r.displayTimeRange(unitMinutes: SettingsService.current.statUnitMinutes)),
-        subtitle: Text(r.data.summary),
+      child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              if (selectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Checkbox(
+                    value: selected,
+                    onChanged: (_) => onTap?.call(),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              SizedBox(
+                width: 44,
+                child: Text(
+                  timeStr,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: _colorForTag(primaryTag).withValues(alpha: 0.3),
+                child: Icon(
+                  _iconForTag(primaryTag),
+                  color: _colorForTag(primaryTag),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  r.data.summary,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -59,12 +59,15 @@ void showScheduledDndSheet(BuildContext context) {
                             itemBuilder: (_, i) {
                               final d = list[i];
                               final preset = presets.where((p) => p.id == d.presetId).firstOrNull;
+                              final timeStr = d.recurringDaily
+                                  ? '每日 ${d.start.hour.toString().padLeft(2, '0')}:${d.start.minute.toString().padLeft(2, '0')} - ${d.end.hour.toString().padLeft(2, '0')}:${d.end.minute.toString().padLeft(2, '0')}'
+                                  : '${_formatDateTime(d.start)} - ${_formatDateTime(d.end)}';
                               return ListTile(
                                 leading: preset != null
                                     ? Icon(preset.icon, color: preset.color)
                                     : const Icon(Icons.notifications_off),
                                 title: Text(
-                                  '${_formatDateTime(d.start)} - ${_formatDateTime(d.end)}',
+                                  timeStr,
                                   style: const TextStyle(fontSize: 13),
                                 ),
                                 subtitle: Text(preset?.name ?? d.presetId),
@@ -99,8 +102,13 @@ Future<void> _showAddDnd(
   List<StatusPreset> presets,
   VoidCallback onChanged,
 ) async {
-  DateTime start = DateTime.now();
-  DateTime end = start.add(const Duration(hours: 8));
+  final now = DateTime.now();
+  DateTime start = DateTime(now.year, now.month, now.day, 22, 0);
+  DateTime end = DateTime(now.year, now.month, now.day, 7, 0);
+  if (end.isBefore(start) || end.isAtSameMomentAs(start)) {
+    end = end.add(const Duration(days: 1));
+  }
+  bool recurringDaily = true;
   String? presetId = presets.isNotEmpty ? presets.first.id : null;
 
   final result = await showDialog<bool>(
@@ -114,46 +122,75 @@ Future<void> _showAddDnd(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  SwitchListTile(
+                    title: const Text('每日循环'),
+                    subtitle: const Text('勾选后按每日时分生效，如 22:00-07:00'),
+                    value: recurringDaily,
+                    onChanged: (v) => setState(() => recurringDaily = v),
+                  ),
                   ListTile(
-                    title: const Text('开始'),
-                    subtitle: Text(_formatDateTime(start)),
-                    trailing: const Icon(Icons.calendar_today),
+                    title: const Text('开始时间'),
+                    subtitle: Text('${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}'),
+                    trailing: const Icon(Icons.access_time),
                     onTap: () async {
-                      final d = await showDatePicker(
+                      final t = await showTimePicker(
                         context: context,
-                        initialDate: start,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                        initialTime: TimeOfDay(hour: start.hour, minute: start.minute),
                       );
-                      if (d != null) {
-                        final t = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay(hour: start.hour, minute: start.minute),
-                        );
-                        if (t != null) setState(() => start = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                      if (t != null) {
+                        setState(() => start = DateTime(start.year, start.month, start.day, t.hour, t.minute));
                       }
                     },
                   ),
                   ListTile(
-                    title: const Text('结束'),
-                    subtitle: Text(_formatDateTime(end)),
-                    trailing: const Icon(Icons.calendar_today),
+                    title: const Text('结束时间'),
+                    subtitle: Text('${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}'),
+                    trailing: const Icon(Icons.access_time),
                     onTap: () async {
-                      final d = await showDatePicker(
+                      final t = await showTimePicker(
                         context: context,
-                        initialDate: end,
-                        firstDate: start,
-                        lastDate: DateTime.now().add(const Duration(days: 31)),
+                        initialTime: TimeOfDay(hour: end.hour, minute: end.minute),
                       );
-                      if (d != null) {
-                        final t = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay(hour: end.hour, minute: end.minute),
-                        );
-                        if (t != null) setState(() => end = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                      if (t != null) {
+                        setState(() {
+                          end = DateTime(end.year, end.month, end.day, t.hour, t.minute);
+                          if (recurringDaily && end.hour == 0 && end.minute == 0) {
+                            end = DateTime(end.year, end.month, end.day, 23, 59).add(const Duration(minutes: 1));
+                          }
+                        });
                       }
                     },
                   ),
+                  if (!recurringDaily) ...[
+                    ListTile(
+                      title: const Text('开始日期'),
+                      subtitle: Text(_formatDateTime(start)),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: start,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 30)),
+                        );
+                        if (d != null) setState(() => start = DateTime(d.year, d.month, d.day, start.hour, start.minute));
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('结束日期'),
+                      subtitle: Text(_formatDateTime(end)),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: end.isBefore(start) ? start : end,
+                          firstDate: start,
+                          lastDate: DateTime.now().add(const Duration(days: 31)),
+                        );
+                        if (d != null) setState(() => end = DateTime(d.year, d.month, d.day, end.hour, end.minute));
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: presetId,
@@ -172,9 +209,7 @@ Future<void> _showAddDnd(
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
               FilledButton(
-                onPressed: presetId == null
-                    ? null
-                    : () => Navigator.pop(context, true),
+                onPressed: presetId == null ? null : () => Navigator.pop(context, true),
                 child: const Text('添加'),
               ),
             ],
@@ -186,11 +221,21 @@ Future<void> _showAddDnd(
 
   final pid = presetId;
   if (result == true && pid != null && pid.isNotEmpty) {
+    DateTime startVal = start;
+    DateTime endVal = end;
+    if (recurringDaily) {
+      startVal = DateTime(2000, 1, 1, start.hour, start.minute);
+      endVal = DateTime(2000, 1, 1, end.hour, end.minute);
+      if (endVal.isBefore(startVal) || endVal.isAtSameMomentAs(startVal)) {
+        endVal = endVal.add(const Duration(days: 1));
+      }
+    }
     final dnd = ScheduledDnd(
       id: 'dnd_${DateTime.now().millisecondsSinceEpoch}',
-      start: start,
-      end: end,
+      start: startVal,
+      end: endVal,
       presetId: pid,
+      recurringDaily: recurringDaily,
     );
     await ScheduledDndStorage.save(dnd);
     onChanged();

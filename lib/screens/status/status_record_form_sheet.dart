@@ -26,7 +26,7 @@ class StatusRecordFormSheet extends StatefulWidget {
 
 class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
   late StatusRecordData _data;
-  List<ActivityTag> _allTags = ActivityTagStorage.getVisible();
+  List<ActivityTag> _allTags = [];
   List<StatusPreset> _presets = [];
   bool _showAddTag = false;
   final TextEditingController _newTagController = TextEditingController();
@@ -34,8 +34,9 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
   @override
   void initState() {
     super.initState();
-    _data = widget.initialData;
+    _data = StatusRecordData.withDefaults(widget.initialData);
     _presets = StatusPresetStorage.getAll();
+    _allTags = ActivityTagStorage.getVisibleSortedByStarred();
   }
 
   @override
@@ -45,12 +46,33 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
   }
 
   void _applyPreset(StatusPreset preset) {
-    setState(() => _data = preset.data);
+    setState(() => _data = StatusRecordData.withDefaults(preset.data));
   }
 
   void _submit() {
+    if (!_data.isComplete) {
+      final msg = _validationMessage();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+      return;
+    }
     widget.onSubmit(_data);
-    if (context.mounted) Navigator.of(context).pop();
+  }
+
+  String _validationMessage() {
+    if (_data.energyUsage == null) return '请选择精力使用';
+    if (_data.physicalUsage == null) return '请选择体力使用';
+    if (_data.activityMotivation == null) return '请选择活动动机';
+    if (_data.outputQuality == null) return '请选择产出定性';
+    if (_data.emotionalState == null) return '请选择情绪状态';
+    if (_data.energyState == null) return '请选择精力状态';
+    if (_data.physicalState == null) return '请选择生理状态';
+    if (_data.attentionState == null) return '请选择注意力状态';
+    if (_data.tagIds.isEmpty) return '请选择至少一个活动标签';
+    return '请填写完整';
   }
 
   Future<void> _saveAsPreset() async {
@@ -223,7 +245,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
                       child: const Text('取消'),
                     ),
                   FilledButton(
-                    onPressed: _data.isEmpty ? null : _submit,
+                    onPressed: _data.isComplete ? _submit : null,
                     child: const Text('保存'),
                   ),
                 ],
@@ -391,7 +413,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
                         if (t.isEmpty) return;
                         await ActivityTagStorage.addTag(ActivityTag(name: t));
                         setState(() {
-                          _allTags = ActivityTagStorage.getVisible();
+                          _allTags = ActivityTagStorage.getVisibleSortedByStarred();
                           if (!_data.tagIds.contains(t)) {
                             _data = _data.copyWith(tagIds: [..._data.tagIds, t]);
                           }
@@ -407,7 +429,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
                       if (t.isEmpty) return;
                       await ActivityTagStorage.addTag(ActivityTag(name: t));
                       setState(() {
-                        _allTags = ActivityTagStorage.getVisible();
+                        _allTags = ActivityTagStorage.getVisibleSortedByStarred();
                         if (!_data.tagIds.contains(t)) {
                           _data = _data.copyWith(tagIds: [..._data.tagIds, t]);
                         }

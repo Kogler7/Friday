@@ -8,6 +8,7 @@ import 'status_data_source.dart';
 
 String get _keyTags => StatusDataSource.key('activity_tags');
 String get _keyHiddenNames => StatusDataSource.key('activity_tag_hidden');
+String get _keyStarredNames => StatusDataSource.key('activity_tag_starred');
 
 /// 默认活动标签（指向内置列表）
 List<ActivityTag> get defaultActivityTags => List.from(builtInActivityTags);
@@ -63,6 +64,47 @@ class ActivityTagStorage {
 
   /// 获取可见标签（用于选择器）
   static List<ActivityTag> getVisible() => getAll(includeHidden: false);
+
+  static Set<String> _getStarredNames() {
+    final jsonStr = _prefs.getString(_keyStarredNames);
+    if (jsonStr == null) return {};
+    try {
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      return list.map((e) => e.toString()).toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _setStarredNames(Set<String> names) async {
+    await _prefs.setString(_keyStarredNames, jsonEncode(names.toList()));
+  }
+
+  /// 星标标签（用于推荐/搜索排序，排在最前）
+  static Set<String> getStarredNames() => _getStarredNames();
+
+  static Future<void> setStarred(String name, bool starred) async {
+    final names = _getStarredNames();
+    if (starred) {
+      names.add(name);
+    } else {
+      names.remove(name);
+    }
+    await _setStarredNames(names);
+  }
+
+  /// 可见标签，星标排前
+  static List<ActivityTag> getVisibleSortedByStarred() {
+    final tags = getVisible();
+    final starred = _getStarredNames();
+    tags.sort((a, b) {
+      final aStarred = starred.contains(a.name);
+      final bStarred = starred.contains(b.name);
+      if (aStarred != bStarred) return aStarred ? -1 : 1;
+      return a.name.compareTo(b.name);
+    });
+    return tags;
+  }
 
   /// 根据 name 查找标签
   static ActivityTag? getByName(String name) {

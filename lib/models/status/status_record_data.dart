@@ -65,6 +65,33 @@ class StatusRecordData {
     );
   }
 
+  /// 所有必填指标是否已填写（用于保存校验）
+  bool get isComplete =>
+      energyUsage != null &&
+      physicalUsage != null &&
+      activityMotivation != null &&
+      outputQuality != null &&
+      emotionalState != null &&
+      energyState != null &&
+      physicalState != null &&
+      attentionState != null &&
+      tagIds.isNotEmpty;
+
+  /// 合并默认值：空字段用默认值填充
+  static StatusRecordData withDefaults(StatusRecordData data) {
+    return StatusRecordData(
+      energyUsage: data.energyUsage ?? EnergyUsage.normal,
+      physicalUsage: data.physicalUsage ?? PhysicalUsage.normal,
+      activityMotivation: data.activityMotivation ?? ActivityMotivation.internal,
+      outputQuality: data.outputQuality ?? OutputQuality.neutral,
+      emotionalState: data.emotionalState ?? EmotionalState.average,
+      energyState: data.energyState ?? EnergyState.average,
+      physicalState: data.physicalState ?? PhysicalState.normal,
+      attentionState: data.attentionState ?? AttentionState.average,
+      tagIds: data.tagIds.isEmpty ? ['休息'] : data.tagIds,
+    );
+  }
+
   /// 是否有有效内容（至少有一个维度被填写）
   bool get isEmpty =>
       energyUsage == null &&

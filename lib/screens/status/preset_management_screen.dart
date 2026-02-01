@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../common/slidable_action_tile.dart';
 import '../../constants/app_config.dart';
 import '../../constants/default_activity_tags.dart';
 import '../../models/status/activity_tag.dart';
+import '../../models/status/status_enums.dart';
 import '../../models/status/status_preset.dart';
 import '../../models/status/status_record_data.dart';
 import '../../services/activity_tag_storage.dart';
@@ -184,8 +186,13 @@ class _PresetList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sorted = List<StatusPreset>.from(presets)
+      ..sort((a, b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        return a.name.compareTo(b.name);
+      });
     return ListView.builder(
-      itemCount: presets.length + 1,
+      itemCount: sorted.length + 1,
       itemBuilder: (_, i) {
         if (i == 0) {
           return ListTile(
@@ -194,27 +201,38 @@ class _PresetList extends StatelessWidget {
             onTap: () => _addPreset(context),
           );
         }
-        final p = presets[i - 1];
+        final p = sorted[i - 1];
         final isBuiltin = p.id.startsWith('builtin_');
-        return ListTile(
-          leading: Icon(p.icon, color: p.color),
-          title: Text(p.name),
-          subtitle: Text(p.data.summary),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () => _editPreset(context, p),
-              ),
-              if (!isBuiltin)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _deletePreset(context, p),
+        final theme = Theme.of(context);
+        return SlidableActionTile(
+          key: ValueKey(p.id),
+          height: 64,
+          leftAction: isBuiltin
+              ? null
+              : SwipeActionConfig(
+                  icon: Icons.delete_outline,
+                  backgroundColor: theme.colorScheme.error,
+                  iconColor: theme.colorScheme.onError,
+                  onTrigger: () => _deletePreset(context, p),
                 ),
-            ],
+          rightAction: SwipeActionConfig(
+            icon: p.pinned ? Icons.star : Icons.star_border,
+            backgroundColor: Colors.amber.shade200,
+            iconColor: Colors.amber.shade900,
+            onTrigger: () => _togglePresetPin(p),
           ),
-          onTap: () => _editPreset(context, p),
+          child: Material(
+            color: theme.colorScheme.surface,
+            child: ListTile(
+              leading: Icon(p.icon, color: p.color),
+              title: Text(p.name),
+              subtitle: Text(p.data.summary),
+              trailing: p.pinned
+                  ? Icon(Icons.star, size: 20, color: Colors.amber.shade700)
+                  : const Icon(Icons.chevron_right),
+              onTap: () => _editPreset(context, p),
+            ),
+          ),
         );
       },
     );
@@ -248,6 +266,11 @@ class _PresetList extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _togglePresetPin(StatusPreset p) async {
+    await StatusPresetStorage.save(p.copyWith(pinned: !p.pinned));
+    onChanged();
   }
 
   void _deletePreset(BuildContext context, StatusPreset p) async {
@@ -314,16 +337,41 @@ class _TagList extends StatelessWidget {
         }
         final t = displayTags[i - 1];
         final isBuiltIn = builtInActivityTags.any((d) => d.name == t.name);
-        return ListTile(
-          title: Text(t.name),
-          subtitle: t.desc != null && t.desc!.isNotEmpty ? Text(t.desc!) : null,
-          trailing: IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _onDeleteTap(context, t, isBuiltIn),
+        final starred = ActivityTagStorage.getStarredNames().contains(t.name);
+        final theme = Theme.of(context);
+        return SlidableActionTile(
+          key: ValueKey(t.name),
+          height: 56,
+          leftAction: SwipeActionConfig(
+            icon: Icons.delete_outline,
+            backgroundColor: theme.colorScheme.error,
+            iconColor: theme.colorScheme.onError,
+            onTrigger: () => _onDeleteTap(context, t, isBuiltIn),
+          ),
+          rightAction: SwipeActionConfig(
+            icon: starred ? Icons.star : Icons.star_border,
+            backgroundColor: Colors.amber.shade200,
+            iconColor: Colors.amber.shade900,
+            onTrigger: () => _toggleTagStarred(t),
+          ),
+          child: Material(
+            color: theme.colorScheme.surface,
+            child: ListTile(
+              title: Text(t.name),
+              subtitle: t.desc != null && t.desc!.isNotEmpty ? Text(t.desc!) : null,
+              trailing: starred ? Icon(Icons.star, size: 20, color: Colors.amber.shade700) : null,
+              onTap: () {},
+            ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _toggleTagStarred(ActivityTag t) async {
+    final starred = ActivityTagStorage.getStarredNames().contains(t.name);
+    await ActivityTagStorage.setStarred(t.name, !starred);
+    onChanged();
   }
 
   Future<void> _onDeleteTap(
@@ -419,7 +467,7 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
   late TextEditingController _nameController;
   late int _iconCodePoint;
   late int _colorValue;
-  late List<String> _tagIds;
+  late StatusRecordData _data;
 
   @override
   void initState() {
@@ -428,13 +476,51 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
     _nameController = TextEditingController(text: p?.name ?? '');
     _iconCodePoint = p?.iconCodePoint ?? Icons.bookmark.codePoint;
     _colorValue = p?.colorValue ?? 0xFF2196F3;
-    _tagIds = List.from(p?.data.tagIds ?? []);
+    _data = p?.data ?? const StatusRecordData();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  Widget _buildEnumRow<T>(ThemeData theme, String label, List<T> values, T? current, ValueChanged<T?> onSelect) {
+    String display(T v) {
+      if (v is EnergyUsage) return (v as EnergyUsage).displayName;
+      if (v is PhysicalUsage) return (v as PhysicalUsage).displayName;
+      if (v is ActivityMotivation) return (v as ActivityMotivation).displayName;
+      if (v is OutputQuality) return (v as OutputQuality).displayName;
+      if (v is EmotionalState) return (v as EmotionalState).displayName;
+      if (v is EnergyState) return (v as EnergyState).displayName;
+      if (v is PhysicalState) return (v as PhysicalState).displayName;
+      if (v is AttentionState) return (v as AttentionState).displayName;
+      return v.toString();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final v in values)
+                ChoiceChip(
+                  label: Text(display(v)),
+                  selected: current == v,
+                  onSelected: (selected) {
+                    if (selected) setState(() => onSelect(v));
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -495,19 +581,37 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
               );
             }).toList(),
           ),
+          const SizedBox(height: 20),
+          Text('活动性质', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          _buildEnumRow<EnergyUsage>(theme, '精力使用', EnergyUsage.values, _data.energyUsage, (v) { setState(() => _data = _data.copyWith(energyUsage: v)); }),
+          _buildEnumRow<PhysicalUsage>(theme, '体力使用', PhysicalUsage.values, _data.physicalUsage, (v) { setState(() => _data = _data.copyWith(physicalUsage: v)); }),
+          _buildEnumRow<ActivityMotivation>(theme, '活动动机', ActivityMotivation.values, _data.activityMotivation, (v) { setState(() => _data = _data.copyWith(activityMotivation: v)); }),
+          _buildEnumRow<OutputQuality>(theme, '产出定性', OutputQuality.values, _data.outputQuality, (v) { setState(() => _data = _data.copyWith(outputQuality: v)); }),
           const SizedBox(height: 16),
-          Text('活动标签', style: theme.textTheme.titleSmall),
+          Text('状态指标', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          _buildEnumRow<EmotionalState>(theme, '情绪状态', EmotionalState.values, _data.emotionalState, (v) { setState(() => _data = _data.copyWith(emotionalState: v)); }),
+          _buildEnumRow<EnergyState>(theme, '精力状态', EnergyState.values, _data.energyState, (v) { setState(() => _data = _data.copyWith(energyState: v)); }),
+          _buildEnumRow<PhysicalState>(theme, '生理状态', PhysicalState.values, _data.physicalState, (v) { setState(() => _data = _data.copyWith(physicalState: v)); }),
+          _buildEnumRow<AttentionState>(theme, '注意力状态', AttentionState.values, _data.attentionState, (v) { setState(() => _data = _data.copyWith(attentionState: v)); }),
+          const SizedBox(height: 16),
+          Text('活动标签', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 6,
-            children: ActivityTagStorage.getVisible().map((tag) {
-              final sel = _tagIds.contains(tag.name);
+            runSpacing: 6,
+            children: ActivityTagStorage.getVisibleSortedByStarred().map((tag) {
+              final sel = _data.tagIds.contains(tag.name);
               return FilterChip(
                 label: Text(tag.name),
                 selected: sel,
                 onSelected: (_) {
                   setState(() {
-                    if (sel) _tagIds.remove(tag.name);
-                    else _tagIds.add(tag.name);
+                    final next = List<String>.from(_data.tagIds);
+                    if (sel) next.remove(tag.name);
+                    else next.add(tag.name);
+                    _data = _data.copyWith(tagIds: next);
                   });
                 },
               );
@@ -538,7 +642,7 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
       name: name,
       iconCodePoint: _iconCodePoint,
       colorValue: _colorValue,
-      data: StatusRecordData(tagIds: _tagIds),
+      data: _data,
       pinned: widget.preset?.pinned ?? false,
     );
     await StatusPresetStorage.save(preset);

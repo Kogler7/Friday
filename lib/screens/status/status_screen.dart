@@ -27,6 +27,7 @@ class StatusScreen extends StatefulWidget {
 class _StatusScreenState extends State<StatusScreen> {
   List<HourlyRecord> _records24h = [];
   final Set<DateTime> _selectedSlots = {};
+  bool _selectionMode = false;
 
   @override
   void initState() {
@@ -158,11 +159,22 @@ class _StatusScreenState extends State<StatusScreen> {
                       children: [
                         Text('过去24小时', style: Theme.of(context).textTheme.titleMedium),
                         const Spacer(),
-                        if (_selectedSlots.isNotEmpty)
+                        if (_selectionMode) ...[
                           TextButton(
-                            onPressed: () => _batchEditSelected(),
-                            child: Text('批量修改 (${_selectedSlots.length})'),
+                            onPressed: () {
+                              setState(() {
+                                _selectionMode = false;
+                                _selectedSlots.clear();
+                              });
+                            },
+                            child: const Text('取消'),
                           ),
+                          if (_selectedSlots.isNotEmpty)
+                            TextButton(
+                              onPressed: () => _batchEditSelected(),
+                              child: Text('批量修改 (${_selectedSlots.length})'),
+                            ),
+                        ],
                       ],
                     ),
               ),
@@ -182,13 +194,25 @@ class _StatusScreenState extends State<StatusScreen> {
                       return StatusRecordTile(
                         key: ValueKey(r.hourStart),
                         record: r,
+                        selectionMode: _selectionMode,
                         selected: selected,
-                        onTap: () => _editRecord(r),
+                        onTap: () {
+                          if (_selectionMode) {
+                            setState(() {
+                              if (selected) _selectedSlots.remove(r.hourStart);
+                              else _selectedSlots.add(r.hourStart);
+                            });
+                          } else {
+                            _editRecord(r);
+                          }
+                        },
                         onLongPress: () {
-                          setState(() {
-                            if (selected) _selectedSlots.remove(r.hourStart);
-                            else _selectedSlots.add(r.hourStart);
-                          });
+                          if (!_selectionMode) {
+                            setState(() {
+                              _selectionMode = true;
+                              _selectedSlots.add(r.hourStart);
+                            });
+                          }
                         },
                       );
                     },
@@ -244,9 +268,11 @@ class _StatusScreenState extends State<StatusScreen> {
       builder: (ctx) => StatusRecordFormSheet(
         initialData: const StatusRecordData(),
         onSubmit: (data) {
-          StorageService.saveRecord(HourlyRecord(hourStart: slot, data: data));
-          _load();
-          if (ctx.mounted) Navigator.of(ctx).pop();
+          Navigator.of(ctx).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await StorageService.saveRecord(HourlyRecord(hourStart: slot, data: data));
+            if (mounted) _load();
+          });
         },
         onCancel: () => Navigator.of(ctx).pop(),
       ),
@@ -261,9 +287,11 @@ class _StatusScreenState extends State<StatusScreen> {
       builder: (ctx) => StatusRecordFormSheet(
         initialData: r.data,
         onSubmit: (data) {
-          StorageService.saveRecord(HourlyRecord(hourStart: r.hourStart, data: data));
-          _load();
-          if (ctx.mounted) Navigator.of(ctx).pop();
+          Navigator.of(ctx).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await StorageService.saveRecord(HourlyRecord(hourStart: r.hourStart, data: data));
+            if (mounted) _load();
+          });
         },
         onCancel: () => Navigator.of(ctx).pop(),
       ),
@@ -292,6 +320,7 @@ class _StatusScreenState extends State<StatusScreen> {
     }
     if (!mounted) return;
     setState(() {
+      _selectionMode = false;
       _selectedSlots.clear();
       _load();
     });
