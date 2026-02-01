@@ -41,6 +41,14 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     _refresh();
   }
 
+  @override
+  void didUpdateWidget(covariant SessionHistoryDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentSessionId != widget.currentSessionId) {
+      _refresh();
+    }
+  }
+
   void _refresh() {
     setState(() {
       _sessions = IdeaSessionStorage.getAllSessions(includeHidden: false);
@@ -216,7 +224,7 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(
                 children: [
                   Text(

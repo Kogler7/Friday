@@ -25,8 +25,7 @@ class IdeaSessionStorage {
     if (sessionsJson != null && sessionsJson.isNotEmpty) return;
     final legacy = ChatStorageService.getMessages();
     if (legacy.isEmpty) {
-      final first = await createSession();
-      await setCurrentSessionId(first.id);
+      await setCurrentSessionId(null);
       return;
     }
     final id = DateTime.now().millisecondsSinceEpoch.toString();
@@ -69,7 +68,7 @@ class IdeaSessionStorage {
     await _saveAllSessions(map);
   }
 
-  /// 获取所有会话（按更新时间倒序）。[includeHidden] 为 true 时包含已隐藏会话（开发者模式用）
+  /// 获取所有会话（按更新时间倒序）
   static List<IdeaSession> getAllSessions({bool includeHidden = false}) {
     final map = _loadAllSessionsMap();
     var list = map.values.toList();
@@ -108,7 +107,7 @@ class IdeaSessionStorage {
     return _loadAllSessionsMap()[id];
   }
 
-  /// 创建新会话并保存
+  /// 创建新会话并保存（空会话，标题为「未命名会话」）
   static Future<IdeaSession> createSession() async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final now = DateTime.now();
@@ -118,6 +117,34 @@ class IdeaSessionStorage {
       createdAt: now,
       updatedAt: now,
       messages: [],
+      isLocked: false,
+      isHidden: false,
+    );
+    await _saveSession(session);
+    return session;
+  }
+
+  /// 以首条消息创建新会话，标题取消息内容的最多前 8 个字符
+  static Future<IdeaSession> createSessionWithFirstMessage(
+    String firstMessageContent,
+  ) async {
+    final trimmed = firstMessageContent.trim();
+    final title = trimmed.isEmpty
+        ? '未命名会话'
+        : (trimmed.length <= 8 ? trimmed : trimmed.substring(0, 8));
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final now = DateTime.now();
+    final msg = ChatMessage(
+      id: now.millisecondsSinceEpoch.toString(),
+      createdAt: now,
+      content: firstMessageContent,
+    );
+    final session = IdeaSession(
+      id: id,
+      title: title,
+      createdAt: now,
+      updatedAt: now,
+      messages: [msg],
       isLocked: false,
       isHidden: false,
     );
@@ -137,9 +164,8 @@ class IdeaSessionStorage {
     await _saveAllSessions(map);
     final current = getCurrentSessionId();
     if (current == id) {
-      final remaining = map.values.toList();
+      final remaining = getAllSessions(includeHidden: false);
       if (remaining.isNotEmpty) {
-        remaining.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         await setCurrentSessionId(remaining.first.id);
       } else {
         await setCurrentSessionId(null);

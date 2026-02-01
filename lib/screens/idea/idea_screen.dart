@@ -199,14 +199,13 @@ class _IdeaScreenState extends State<IdeaScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _addSession() async {
-    final session = await IdeaSessionStorage.createSession();
-    await IdeaSessionStorage.setCurrentSessionId(session.id);
+  void _addSession() {
+    IdeaSessionStorage.setCurrentSessionId(null);
     _loadCurrentSession();
   }
 
-  Future<void> _createAndSwitchToNewSession() async {
-    await _addSession();
+  void _createAndSwitchToNewSession() {
+    _addSession();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -215,10 +214,23 @@ class _IdeaScreenState extends State<IdeaScreen>
     if (text.isEmpty) return;
     _controller.clear();
     if (_currentSession == null) {
-      final session = await IdeaSessionStorage.createSession();
+      final session = await IdeaSessionStorage.createSessionWithFirstMessage(
+        text,
+      );
       await IdeaSessionStorage.setCurrentSessionId(session.id);
       _loadCurrentSession();
-      if (_currentSession == null) return;
+      if (_scrollController.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+      return;
     }
     final msg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -377,7 +389,7 @@ class _IdeaScreenState extends State<IdeaScreen>
                               _dragStartX = null;
                             },
                             onPointerMove: (e) {
-                              if (_dragStartX == null) _dragStartX = e.position.dx;
+                              _dragStartX ??= e.position.dx;
                               final dx = e.delta.dx;
                               final dy = e.delta.dy;
                               if (dy.abs() > 2 * dx.abs()) return;
