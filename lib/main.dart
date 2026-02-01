@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'constants/app_config.dart';
 import 'screens/main_shell.dart';
 import 'services/chat_storage_service.dart';
+import 'services/idea_session_storage.dart';
 import 'services/notification_service.dart';
 import 'services/settings_service.dart';
 import 'services/storage_service.dart';
@@ -89,6 +90,8 @@ class _AppLoaderState extends State<_AppLoader> {
       await StorageService.init();
       await Future.delayed(Duration.zero);
       await ChatStorageService.init();
+      await Future.delayed(Duration.zero);
+      await IdeaSessionStorage.init();
       await Future.delayed(Duration.zero);
       await TodoStorageService.init();
       if (!mounted) return;
