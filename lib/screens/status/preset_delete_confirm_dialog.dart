@@ -2,31 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../idea/delete_confirm_dialog.dart';
 
-/// 标签删除确认：可见时点按删除/长按隐藏，已隐藏时点按彻底删除/长按恢复可见
-class TagDeleteConfirmDialog extends StatefulWidget {
-  final String tagName;
+/// 预设删除确认：可见时点按删除/长按隐藏，已隐藏时点按彻底删除/长按恢复可见
+class PresetDeleteConfirmDialog extends StatefulWidget {
+  final String presetName;
   final bool isHidden;
   final bool isBuiltin;
 
-  const TagDeleteConfirmDialog({
+  const PresetDeleteConfirmDialog({
     super.key,
-    required this.tagName,
+    required this.presetName,
     required this.isHidden,
     required this.isBuiltin,
   });
 
   @override
-  State<TagDeleteConfirmDialog> createState() => _TagDeleteConfirmDialogState();
+  State<PresetDeleteConfirmDialog> createState() => _PresetDeleteConfirmDialogState();
 }
 
-class _TagDeleteConfirmDialogState extends State<TagDeleteConfirmDialog> {
+class _PresetDeleteConfirmDialogState extends State<PresetDeleteConfirmDialog> {
   bool _longPressHandled = false;
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('删除标签'),
-      content: Text('确定要删除「${widget.tagName}」吗？已使用该标签的记录将保留。'),
+      title: const Text('删除预设'),
+      content: Text('确定要删除「${widget.presetName}」吗？'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(DeleteConfirmResult.cancel),

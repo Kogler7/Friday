@@ -1,6 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import '../../constants/app_config.dart';
 import '../../models/activity/hourly_record.dart';
 import '../../services/status_data_source.dart';
 import '../../services/storage_service.dart';
@@ -59,7 +58,7 @@ class _StatsScreenState extends State<StatsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (kIsDevMode)
+              if (kDebugMode)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(

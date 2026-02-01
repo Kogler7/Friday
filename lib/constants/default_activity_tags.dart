@@ -2,6 +2,7 @@ import '../models/status/activity_tag.dart';
 
 /// 内置默认活动标签（可恢复）
 const List<ActivityTag> builtInActivityTags = [
+  ActivityTag(name: '工作'),
   ActivityTag(name: '通勤'),
   ActivityTag(name: '会议'),
   ActivityTag(name: '就餐'),

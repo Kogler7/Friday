@@ -1,6 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import '../constants/app_config.dart';
 import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/hourly_prompt_dialog.dart';
@@ -66,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          if (kIsDevMode)
+          if (kDebugMode)
             IconButton(
               icon: const Icon(Icons.science),
               tooltip: '开发',

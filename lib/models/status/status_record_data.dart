@@ -29,6 +29,9 @@ class StatusRecordData {
   /// 活动标签 id 列表（多选）
   final List<String> tagIds;
 
+  /// 来源预设 id（可选，用于隐藏预设时展示默认）
+  final String? presetId;
+
   const StatusRecordData({
     this.energyUsage,
     this.physicalUsage,
@@ -39,6 +42,7 @@ class StatusRecordData {
     this.physicalState,
     this.attentionState,
     this.tagIds = const [],
+    this.presetId,
   });
 
   StatusRecordData copyWith({
@@ -51,6 +55,7 @@ class StatusRecordData {
     PhysicalState? physicalState,
     AttentionState? attentionState,
     List<String>? tagIds,
+    String? presetId,
   }) {
     return StatusRecordData(
       energyUsage: energyUsage ?? this.energyUsage,
@@ -62,6 +67,7 @@ class StatusRecordData {
       physicalState: physicalState ?? this.physicalState,
       attentionState: attentionState ?? this.attentionState,
       tagIds: tagIds ?? List.from(this.tagIds),
+      presetId: presetId ?? this.presetId,
     );
   }
 
@@ -130,11 +136,13 @@ class StatusRecordData {
         if (physicalState != null) 'physicalState': physicalState!.name,
         if (attentionState != null) 'attentionState': attentionState!.name,
         'tagIds': tagIds,
+        if (presetId != null && presetId!.isNotEmpty) 'presetId': presetId,
       };
 
   factory StatusRecordData.fromJson(Map<String, dynamic> json) {
     final tagRaw = json['tagIds'] as List<dynamic>?;
     final tagList = tagRaw?.map((e) => e.toString()).toList() ?? [];
+    final presetIdRaw = json['presetId'] as String?;
     return StatusRecordData(
       energyUsage: _parseEnum(json['energyUsage'], EnergyUsage.values),
       physicalUsage: _parseEnum(json['physicalUsage'], PhysicalUsage.values),
@@ -148,6 +156,7 @@ class StatusRecordData {
       attentionState:
           _parseEnum(json['attentionState'], AttentionState.values),
       tagIds: tagList,
+      presetId: presetIdRaw != null && presetIdRaw.isNotEmpty ? presetIdRaw : null,
     );
   }
 

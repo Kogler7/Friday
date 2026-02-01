@@ -324,7 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setState) {
-            final tags = ActivityTagStorage.getAll();
+            final tags = ActivityTagStorage.getAll(includeHidden: true);
             return AlertDialog(
               title: const Text('活动标签'),
               content: SizedBox(

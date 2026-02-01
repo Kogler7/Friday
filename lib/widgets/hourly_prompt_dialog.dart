@@ -64,7 +64,7 @@ void showHourlyPromptDialog(
         Navigator.of(ctx).pop();
       },
       onTimeout: () {
-        _saveIntervalAndCancel(slot, recommendation.preset.data);
+        _saveIntervalAndCancel(slot, recommendation.preset.data.copyWith(presetId: recommendation.preset.id));
         HourlyPromptService.markDialogClosed();
         if (ctx.mounted) Navigator.of(ctx).pop();
         onTimeout?.call();
@@ -205,7 +205,7 @@ class _HourlyPromptSheetState extends State<_HourlyPromptSheet> {
                 _PresetChip(
                   preset: rec.preset,
                   probability: rec.sampleCount > 0 ? rec.probability : null,
-                  onTap: () => widget.onSelected(rec.preset.data),
+                  onTap: () => widget.onSelected(rec.preset.data.copyWith(presetId: rec.preset.id)),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(

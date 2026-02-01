@@ -144,7 +144,7 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
                                 dateEnd: de,
                                 timeStart: ts,
                                 timeEnd: te,
-                                data: preset.data,
+                                data: preset.data.copyWith(presetId: preset.id),
                               );
                               onComplete();
                               if (parentContext.mounted) {

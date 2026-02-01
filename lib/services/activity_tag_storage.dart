@@ -37,9 +37,8 @@ class ActivityTagStorage {
     await _prefs.setString(_keyHiddenNames, jsonEncode(names.toList()));
   }
 
-  /// 获取所有标签（默认 + 用户自定义）
-  /// [includeHidden] 为 false 时过滤掉 hidden 的标签
-  static List<ActivityTag> getAll({bool includeHidden = true}) {
+  /// 获取所有标签
+  static List<ActivityTag> getAll({bool includeHidden = false}) {
     final hiddenNames = _getHiddenNames();
     final jsonStr = _prefs.getString(_keyTags);
     List<ActivityTag> custom = [];
@@ -54,16 +53,13 @@ class ActivityTagStorage {
     final defaultNames = builtInActivityTags.map((t) => t.name).toSet();
     final combined = [
       ...builtInActivityTags.map((t) => t.copyWith(hidden: hiddenNames.contains(t.name))),
-      ...custom.where((t) => !defaultNames.contains(t.name)),
+      ...custom.where((t) => !defaultNames.contains(t.name)).map((t) => t.copyWith(hidden: hiddenNames.contains(t.name))),
     ];
     if (!includeHidden) {
       return combined.where((t) => !t.hidden).toList();
     }
     return combined;
   }
-
-  /// 获取可见标签（用于选择器）
-  static List<ActivityTag> getVisible() => getAll(includeHidden: false);
 
   static Set<String> _getStarredNames() {
     final jsonStr = _prefs.getString(_keyStarredNames);
@@ -93,9 +89,9 @@ class ActivityTagStorage {
     await _setStarredNames(names);
   }
 
-  /// 可见标签，星标排前
-  static List<ActivityTag> getVisibleSortedByStarred() {
-    final tags = getVisible();
+  /// 标签列表，星标排前
+  static List<ActivityTag> getAllSortedByStarred({bool includeHidden = false}) {
+    final tags = getAll(includeHidden: includeHidden);
     final starred = _getStarredNames();
     tags.sort((a, b) {
       final aStarred = starred.contains(a.name);
@@ -109,7 +105,7 @@ class ActivityTagStorage {
   /// 根据 name 查找标签
   static ActivityTag? getByName(String name) {
     try {
-      return getAll().firstWhere((t) => t.name == name);
+      return getAll(includeHidden: true).firstWhere((t) => t.name == name);
     } catch (_) {
       return null;
     }
@@ -121,7 +117,7 @@ class ActivityTagStorage {
   /// 添加自定义标签
   static Future<void> addTag(ActivityTag tag) async {
     if (tag.name.trim().isEmpty) return;
-    final all = getAll();
+    final all = getAll(includeHidden: true);
     if (all.any((t) => t.name == tag.name)) return;
     final custom = all.where((t) => !builtInActivityTags.any((d) => d.name == t.name)).toList();
     custom.add(tag);
@@ -131,14 +127,14 @@ class ActivityTagStorage {
   /// 删除标签（仅自定义标签可删）
   static Future<void> deleteTag(String name) async {
     if (builtInActivityTags.any((d) => d.name == name)) return;
-    final custom = getAll().where((t) => builtInActivityTags.every((d) => d.name != t.name)).toList();
+    final custom = getAll(includeHidden: true).where((t) => builtInActivityTags.every((d) => d.name != t.name)).toList();
     custom.removeWhere((t) => t.name == name);
     await _saveCustom(custom);
   }
 
   /// 更新标签
   static Future<void> updateTag(ActivityTag tag) async {
-    final all = getAll();
+    final all = getAll(includeHidden: true);
     final custom = all.where((t) => !builtInActivityTags.any((d) => d.name == t.name)).toList();
     final idx = custom.indexWhere((t) => t.name == tag.name);
     if (idx >= 0) {

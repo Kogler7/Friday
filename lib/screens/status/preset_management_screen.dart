@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../common/slidable_action_tile.dart';
 import '../../constants/app_config.dart';
@@ -10,6 +11,7 @@ import '../../models/status/status_record_data.dart';
 import '../../services/activity_tag_storage.dart';
 import '../../services/preset_import_export.dart';
 import '../idea/delete_confirm_dialog.dart';
+import 'preset_delete_confirm_dialog.dart';
 import 'tag_delete_confirm_dialog.dart';
 import '../../services/status_preset_storage.dart';
 
@@ -29,12 +31,22 @@ class _PresetManagementScreenState extends State<PresetManagementScreen> {
   void initState() {
     super.initState();
     _load();
+    userDeveloperMode.addListener(_onDevModeChanged);
   }
 
+  @override
+  void dispose() {
+    userDeveloperMode.removeListener(_onDevModeChanged);
+    super.dispose();
+  }
+
+  void _onDevModeChanged() => _load();
+
   void _load() {
+    final includeHidden = userDeveloperMode.value;
     setState(() {
-      _presets = StatusPresetStorage.getAll();
-      _tags = ActivityTagStorage.getAll();
+      _presets = StatusPresetStorage.getAll(includeHidden: includeHidden);
+      _tags = ActivityTagStorage.getAll(includeHidden: includeHidden);
     });
   }
 
@@ -62,15 +74,14 @@ class _PresetManagementScreenState extends State<PresetManagementScreen> {
             ),
           ],
         ),
-        body: TabBarView(
-          children: [
-            _PresetList(presets: _presets, onChanged: _load),
-            ValueListenableBuilder<bool>(
-              valueListenable: userDeveloperMode,
-              builder: (_, isDevMode, __) =>
-                  _TagList(tags: _tags, isDevMode: isDevMode, onChanged: _load),
-            ),
-          ],
+        body: ValueListenableBuilder<bool>(
+          valueListenable: userDeveloperMode,
+          builder: (_, isDevMode, __) => TabBarView(
+            children: [
+              _PresetList(presets: _presets, isDevMode: isDevMode, onChanged: _load),
+              _TagList(tags: _tags, isDevMode: isDevMode, onChanged: _load),
+            ],
+          ),
         ),
       ),
     );
@@ -81,52 +92,34 @@ class _PresetManagementScreenState extends State<PresetManagementScreen> {
       context: context,
       builder: (ctx) => _ExportSelectDialog(presets: _presets),
     );
-    if (selected == null || selected.isEmpty) return;
+    if (selected == null || selected.isEmpty || !mounted) return;
     final toExport = _presets.where((p) => selected.contains(p.id)).toList();
-    final json = PresetImportExport.exportToJson(toExport);
-    await PresetImportExport.copyToClipboard(json);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已导出 ${toExport.length} 个预设到剪贴板')),
-      );
-    }
+    final raw = PresetImportExport.exportToJson(toExport);
+    final formatted = PresetImportExport.formatJson(raw);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _ExportPreviewSheet(
+        jsonText: formatted,
+        presetCount: toExport.length,
+      ),
+    );
   }
 
   Future<void> _doImport() async {
-    final json = await PresetImportExport.pasteFromClipboard();
-    if (json == null || json.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('剪贴板为空')),
-        );
-      }
-      return;
-    }
-    final presets = PresetImportExport.importFromJson(json);
-    if (presets.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法解析预设数据')),
-        );
-      }
-      return;
-    }
-    for (final p in presets) {
-      final id = p.id.startsWith('builtin_') ? 'imported_${p.id}_${DateTime.now().millisecondsSinceEpoch}' : p.id;
-      await StatusPresetStorage.save(StatusPreset(
-        id: id,
-        name: p.name,
-        iconCodePoint: p.iconCodePoint,
-        colorValue: p.colorValue,
-        data: p.data,
-      ));
-    }
-    _load();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已导入 ${presets.length} 个预设')),
-      );
-    }
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _ImportPreviewSheet(
+        onImported: () {
+          _load();
+          Navigator.of(ctx).pop();
+        },
+      ),
+    );
   }
 }
 
@@ -178,11 +171,268 @@ class _ExportSelectDialogState extends State<_ExportSelectDialog> {
   }
 }
 
+/// 导出预览：格式化 JSON + 复制按钮
+class _ExportPreviewSheet extends StatelessWidget {
+  final String jsonText;
+  final int presetCount;
+
+  const _ExportPreviewSheet({
+    required this.jsonText,
+    required this.presetCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollController) {
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Text(
+                    '导出预设 ($presetCount 个)',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: jsonText),
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('已复制到剪贴板')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('复制到剪贴板'),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  jsonText,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 导入预览：输入框 + 粘贴按钮 + 格式化 + 预设列表预览 + 确认导入
+class _ImportPreviewSheet extends StatefulWidget {
+  final VoidCallback onImported;
+
+  const _ImportPreviewSheet({required this.onImported});
+
+  @override
+  State<_ImportPreviewSheet> createState() => _ImportPreviewSheetState();
+}
+
+class _ImportPreviewSheetState extends State<_ImportPreviewSheet> {
+  final TextEditingController _controller = TextEditingController();
+  List<StatusPreset>? _parsedPresets;
+  String? _parseError;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    final text = _controller.text;
+    if (text.trim().isEmpty) {
+      setState(() {
+        _parsedPresets = null;
+        _parseError = null;
+      });
+      return;
+    }
+    final (presets, error) = PresetImportExport.parseFromJson(text);
+    setState(() {
+      _parsedPresets = presets;
+      _parseError = error;
+    });
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text ?? '';
+    if (text.isNotEmpty) {
+      _applyFormat(text);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('剪贴板为空')),
+      );
+    }
+  }
+
+  void _applyFormat(String text) {
+    final formatted = PresetImportExport.formatJson(text);
+    _controller.text = formatted;
+    _onTextChanged();
+  }
+
+  Future<void> _confirmImport() async {
+    if (_parsedPresets == null || _parsedPresets!.isEmpty) return;
+    for (final p in _parsedPresets!) {
+      final id = p.id.startsWith('builtin_')
+          ? 'imported_${p.id}_${DateTime.now().millisecondsSinceEpoch}'
+          : p.id;
+      await StatusPresetStorage.save(StatusPreset(
+        id: id,
+        name: p.name,
+        iconCodePoint: p.iconCodePoint,
+        colorValue: p.colorValue,
+        data: p.data,
+      ));
+    }
+    widget.onImported();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已导入 ${_parsedPresets!.length} 个预设')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final canImport = _parsedPresets != null && _parsedPresets!.isNotEmpty;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.8,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (_, scrollController) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '导入预设',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: '粘贴或输入 JSON 数据',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    maxLines: 6,
+                    onChanged: (_) => _onTextChanged(),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _paste,
+                        icon: const Icon(Icons.content_paste, size: 18),
+                        label: const Text('从剪贴板粘贴'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () => _applyFormat(_controller.text),
+                        icon: const Icon(Icons.format_align_left, size: 18),
+                        label: const Text('格式化'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (_parseError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text(
+                  _parseError!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            if (_parsedPresets != null && _parsedPresets!.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  '将新增以下 ${_parsedPresets!.length} 个预设：',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _parsedPresets!.length,
+                  itemBuilder: (_, i) {
+                    final p = _parsedPresets![i];
+                    return ListTile(
+                      leading: Icon(p.icon, color: p.color, size: 24),
+                      title: Text(p.name),
+                      subtitle: Text(p.data.summary),
+                    );
+                  },
+                ),
+              ),
+            ] else
+              const Expanded(child: SizedBox.shrink()),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: FilledButton(
+                onPressed: canImport ? _confirmImport : null,
+                child: const Text('确认导入'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _PresetList extends StatelessWidget {
   final List<StatusPreset> presets;
+  final bool isDevMode;
   final VoidCallback onChanged;
 
-  const _PresetList({required this.presets, required this.onChanged});
+  const _PresetList({required this.presets, required this.isDevMode, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -195,26 +445,43 @@ class _PresetList extends StatelessWidget {
       itemCount: sorted.length + 1,
       itemBuilder: (_, i) {
         if (i == 0) {
-          return ListTile(
-            leading: const Icon(Icons.add_circle_outline),
-            title: const Text('新增预设'),
-            onTap: () => _addPreset(context),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline),
+                title: const Text('新增预设'),
+                onTap: () => _addPreset(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.restore),
+                title: const Text('恢复默认'),
+                subtitle: const Text('重置内置预设可见性'),
+                onTap: () async {
+                  await StatusPresetStorage.restoreBuiltInVisibility();
+                  onChanged();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已恢复默认')),
+                    );
+                  }
+                },
+              ),
+            ],
           );
         }
         final p = sorted[i - 1];
-        final isBuiltin = p.id.startsWith('builtin_');
         final theme = Theme.of(context);
+        final dimColor = (p.hidden && isDevMode) ? theme.colorScheme.outline : null;
         return SlidableActionTile(
           key: ValueKey(p.id),
           height: 64,
-          leftAction: isBuiltin
-              ? null
-              : SwipeActionConfig(
-                  icon: Icons.delete_outline,
-                  backgroundColor: theme.colorScheme.error,
-                  iconColor: theme.colorScheme.onError,
-                  onTrigger: () => _deletePreset(context, p),
-                ),
+          leftAction: SwipeActionConfig(
+            icon: Icons.delete_outline,
+            backgroundColor: theme.colorScheme.error,
+            iconColor: theme.colorScheme.onError,
+            onTrigger: () => _deletePreset(context, p),
+          ),
           rightAction: SwipeActionConfig(
             icon: p.pinned ? Icons.star : Icons.star_border,
             backgroundColor: Colors.amber.shade200,
@@ -224,9 +491,9 @@ class _PresetList extends StatelessWidget {
           child: Material(
             color: theme.colorScheme.surface,
             child: ListTile(
-              leading: Icon(p.icon, color: p.color),
-              title: Text(p.name),
-              subtitle: Text(p.data.summary),
+              leading: Icon(p.icon, color: dimColor ?? p.color),
+              title: Text(p.name, style: dimColor != null ? TextStyle(color: dimColor) : null),
+              subtitle: Text(p.data.summary, style: dimColor != null ? TextStyle(color: dimColor) : null),
               trailing: p.pinned
                   ? Icon(Icons.star, size: 20, color: Colors.amber.shade700)
                   : const Icon(Icons.chevron_right),
@@ -274,18 +541,32 @@ class _PresetList extends StatelessWidget {
   }
 
   void _deletePreset(BuildContext context, StatusPreset p) async {
-    final ok = await showDialog<bool>(
+    final result = await showDialog<DeleteConfirmResult>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('删除预设'),
-        content: Text('确定删除「${p.name}」？'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
-        ],
+      builder: (_) => PresetDeleteConfirmDialog(
+        presetName: p.name,
+        isHidden: p.hidden,
+        isBuiltin: p.id.startsWith('builtin_'),
       ),
     );
-    if (ok == true) {
+    if (result == null || result == DeleteConfirmResult.cancel || !context.mounted) return;
+    if (result == DeleteConfirmResult.setHidden) {
+      if (p.hidden) {
+        await StatusPresetStorage.setHidden(p.id, false);
+      } else {
+        await StatusPresetStorage.setHidden(p.id, true);
+      }
+      onChanged();
+      return;
+    }
+    if (p.id.startsWith('builtin_')) {
+      if (p.hidden) {
+        await StatusPresetStorage.setHidden(p.id, false);
+      } else {
+        await StatusPresetStorage.setHidden(p.id, true);
+      }
+      onChanged();
+    } else {
       await StatusPresetStorage.delete(p.id);
       onChanged();
     }
@@ -305,7 +586,7 @@ class _TagList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayTags = isDevMode ? tags : tags.where((t) => !t.hidden).toList();
+    final displayTags = tags;
     return ListView.builder(
       itemCount: displayTags.length + 1,
       itemBuilder: (_, i) {
@@ -321,7 +602,6 @@ class _TagList extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.restore),
                 title: const Text('恢复默认'),
-                subtitle: const Text('重置内置标签可见性'),
                 onTap: () async {
                   await ActivityTagStorage.restoreDefaults();
                   onChanged();
@@ -339,6 +619,7 @@ class _TagList extends StatelessWidget {
         final isBuiltIn = builtInActivityTags.any((d) => d.name == t.name);
         final starred = ActivityTagStorage.getStarredNames().contains(t.name);
         final theme = Theme.of(context);
+        final dimColor = (t.hidden && isDevMode) ? theme.colorScheme.outline : null;
         return SlidableActionTile(
           key: ValueKey(t.name),
           height: 56,
@@ -357,8 +638,10 @@ class _TagList extends StatelessWidget {
           child: Material(
             color: theme.colorScheme.surface,
             child: ListTile(
-              title: Text(t.name),
-              subtitle: t.desc != null && t.desc!.isNotEmpty ? Text(t.desc!) : null,
+              title: Text(t.name, style: dimColor != null ? TextStyle(color: dimColor) : null),
+              subtitle: t.desc != null && t.desc!.isNotEmpty
+                  ? Text(t.desc!, style: dimColor != null ? TextStyle(color: dimColor) : null)
+                  : null,
               trailing: starred ? Icon(Icons.star, size: 20, color: Colors.amber.shade700) : null,
               onTap: () {},
             ),
@@ -381,38 +664,32 @@ class _TagList extends StatelessWidget {
   ) async {
     final result = await showDialog<DeleteConfirmResult>(
       context: context,
-      builder: (_) => TagDeleteConfirmDialog(tagName: t.name),
+      builder: (_) => TagDeleteConfirmDialog(
+        tagName: t.name,
+        isHidden: t.hidden,
+        isBuiltin: isBuiltIn,
+      ),
     );
     if (result == null || result == DeleteConfirmResult.cancel || !context.mounted) return;
     if (result == DeleteConfirmResult.setHidden) {
-      if (!isDevMode) return;
       if (t.hidden) {
         await ActivityTagStorage.setHidden(t.name, false);
       } else {
         await ActivityTagStorage.setHidden(t.name, true);
       }
       onChanged();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已删除标签')),
-        );
-      }
       return;
     }
     if (isBuiltIn) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('内置标签仅可隐藏')),
-        );
+      if (t.hidden) {
+        await ActivityTagStorage.setHidden(t.name, false);
+      } else {
+        await ActivityTagStorage.setHidden(t.name, true);
       }
+      onChanged();
     } else {
       await ActivityTagStorage.deleteTag(t.name);
       onChanged();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已删除标签')),
-        );
-      }
     }
   }
 
@@ -476,7 +753,7 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
     _nameController = TextEditingController(text: p?.name ?? '');
     _iconCodePoint = p?.iconCodePoint ?? Icons.bookmark.codePoint;
     _colorValue = p?.colorValue ?? 0xFF2196F3;
-    _data = p?.data ?? const StatusRecordData();
+    _data = StatusRecordData.withDefaults(p?.data ?? const StatusRecordData());
   }
 
   @override
@@ -601,7 +878,7 @@ class _PresetEditScreenState extends State<PresetEditScreen> {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: ActivityTagStorage.getVisibleSortedByStarred().map((tag) {
+            children: ActivityTagStorage.getAllSortedByStarred().map((tag) {
               final sel = _data.tagIds.contains(tag.name);
               return FilterChip(
                 label: Text(tag.name),

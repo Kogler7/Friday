@@ -237,7 +237,7 @@ class _PresetPickerSheetState extends State<PresetPickerSheet> {
                                   preset: p,
                                   onSelect: () {
                                     Navigator.pop(context);
-                                    widget.onSelect(p.data);
+                                    widget.onSelect(p.data.copyWith(presetId: p.id));
                                   },
                                   onTogglePin: () => _onTogglePin(p),
                                   onDelete: () => _onDelete(p),

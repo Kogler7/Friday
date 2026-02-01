@@ -36,7 +36,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
     super.initState();
     _data = StatusRecordData.withDefaults(widget.initialData);
     _presets = StatusPresetStorage.getAll();
-    _allTags = ActivityTagStorage.getVisibleSortedByStarred();
+    _allTags = ActivityTagStorage.getAllSortedByStarred();
   }
 
   @override
@@ -46,7 +46,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
   }
 
   void _applyPreset(StatusPreset preset) {
-    setState(() => _data = StatusRecordData.withDefaults(preset.data));
+    setState(() => _data = StatusRecordData.withDefaults(preset.data).copyWith(presetId: preset.id));
   }
 
   void _submit() {
@@ -413,7 +413,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
                         if (t.isEmpty) return;
                         await ActivityTagStorage.addTag(ActivityTag(name: t));
                         setState(() {
-                          _allTags = ActivityTagStorage.getVisibleSortedByStarred();
+                          _allTags = ActivityTagStorage.getAllSortedByStarred();
                           if (!_data.tagIds.contains(t)) {
                             _data = _data.copyWith(tagIds: [..._data.tagIds, t]);
                           }
@@ -429,7 +429,7 @@ class _StatusRecordFormSheetState extends State<StatusRecordFormSheet> {
                       if (t.isEmpty) return;
                       await ActivityTagStorage.addTag(ActivityTag(name: t));
                       setState(() {
-                        _allTags = ActivityTagStorage.getVisibleSortedByStarred();
+                        _allTags = ActivityTagStorage.getAllSortedByStarred();
                         if (!_data.tagIds.contains(t)) {
                           _data = _data.copyWith(tagIds: [..._data.tagIds, t]);
                         }

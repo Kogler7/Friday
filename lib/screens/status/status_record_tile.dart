@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/activity/hourly_record.dart';
 import '../../services/activity_tag_storage.dart';
+import '../../services/status_preset_storage.dart';
 
 /// 状态页小时记录卡片：时间轴式布局，左侧时间右侧内容
 class StatusRecordTile extends StatelessWidget {
@@ -23,9 +24,13 @@ class StatusRecordTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = record;
+    final useDefaultDisplay = r.data.presetId != null &&
+        (StatusPresetStorage.getById(r.data.presetId!)?.hidden ?? false);
     final tagIds = r.data.tagIds;
     final primaryTagId = tagIds.isNotEmpty ? tagIds.first : '';
-    final primaryTag = primaryTagId.isEmpty ? '—' : (ActivityTagStorage.getByName(primaryTagId)?.name ?? primaryTagId);
+    final primaryTag = useDefaultDisplay
+        ? '休息'
+        : (primaryTagId.isEmpty ? '—' : (ActivityTagStorage.getByName(primaryTagId)?.name ?? primaryTagId));
     final h = r.hourStart.hour;
     final m = r.hourStart.minute;
     String pad(int n) => n < 10 ? '0$n' : '$n';
@@ -73,7 +78,7 @@ class StatusRecordTile extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  r.data.summary,
+                  useDefaultDisplay ? '休息' : r.data.summary,
                   style: Theme.of(context).textTheme.bodyMedium,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

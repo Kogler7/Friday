@@ -1,6 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import '../../constants/app_config.dart';
 import '../../models/activity/hourly_record.dart';
 import '../../models/status/status_record_data.dart';
 import '../../services/dev_sample_data.dart';
@@ -82,7 +81,7 @@ class _StatusScreenState extends State<StatusScreen> {
             const PopupMenuItem(value: 'batch', child: Text('批量设置')),
             const PopupMenuItem(value: 'dnd', child: Text('预定免打扰')),
           ];
-          if (kIsDevMode) {
+          if (kDebugMode) {
             items.addAll([
               const PopupMenuDivider(),
               if (StatusDataSource.isTestData)
@@ -227,7 +226,7 @@ class _StatusScreenState extends State<StatusScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (kIsDevMode) _buildDataSwitchButton(),
+          if (kDebugMode) _buildDataSwitchButton(),
           const SizedBox(height: 8),
           FloatingActionButton(
             onPressed: () => _showAddRecordSheet(context),
@@ -346,7 +345,7 @@ class _PresetSelectSheet extends StatelessWidget {
           ...presets.map((p) => ListTile(
             leading: Icon(p.icon, color: p.color),
             title: Text(p.name),
-            onTap: () => onSelect(p.data),
+            onTap: () => onSelect(p.data.copyWith(presetId: p.id)),
           )),
         ],
       ),

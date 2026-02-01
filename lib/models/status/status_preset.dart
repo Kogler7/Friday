@@ -10,6 +10,8 @@ class StatusPreset {
   final int colorValue;
   final StatusRecordData data;
   final bool pinned;
+  /// 是否隐藏（不持久化到 json，由 storage 合并）
+  final bool hidden;
 
   const StatusPreset({
     required this.id,
@@ -18,6 +20,7 @@ class StatusPreset {
     required this.colorValue,
     required this.data,
     this.pinned = false,
+    this.hidden = false,
   });
 
   IconData get icon => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
@@ -31,6 +34,7 @@ class StatusPreset {
     int? colorValue,
     StatusRecordData? data,
     bool? pinned,
+    bool? hidden,
   }) =>
       StatusPreset(
         id: id ?? this.id,
@@ -39,6 +43,7 @@ class StatusPreset {
         colorValue: colorValue ?? this.colorValue,
         data: data ?? this.data,
         pinned: pinned ?? this.pinned,
+        hidden: hidden ?? this.hidden,
       );
 
   Map<String, dynamic> toJson() => {

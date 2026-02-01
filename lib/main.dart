@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'constants/app_config.dart';
@@ -67,7 +68,7 @@ class _PlanPlusAppState extends State<PlanPlusApp> with WidgetsBindingObserver {
     final seedColor = Color(prefs.seedColorValue);
     return MaterialApp(
       title: 'PlanPlus',
-      debugShowCheckedModeBanner: kIsDevMode && _userDevMode,
+      debugShowCheckedModeBanner: _userDevMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
         useMaterial3: true,
@@ -119,7 +120,7 @@ class _AppLoaderState extends State<_AppLoader> {
       Future.delayed(const Duration(milliseconds: 500), () {
         try {
           NotificationService.init().then((_) {
-            if (kIsDevMode) {
+            if (kDebugMode) {
               NotificationService.scheduleDevModePrompts();
             } else {
               NotificationService.scheduleHourlyPrompts();

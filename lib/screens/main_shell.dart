@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../constants/app_config.dart';
@@ -216,7 +217,7 @@ class _MainShellState extends State<MainShell> {
                         leading: const Icon(Icons.info_outline),
                         title: const Text('关于'),
                         onTap: _onAboutTap,
-                        onLongPress: kIsDevMode
+                        onLongPress: kDebugMode
                             ? () async {
                                 Navigator.pop(context);
                                 await _handleDevModeEntry();

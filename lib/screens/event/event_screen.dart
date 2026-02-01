@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../common/slidable_action_tile.dart';
-import '../../constants/app_config.dart';
 import '../../models/event/todo_item.dart';
 import '../../services/dev_todo_sample.dart';
 import '../../services/todo_storage_service.dart';
@@ -70,7 +70,7 @@ class _EventScreenState extends State<EventScreen> {
         onPressed: _timelineController.reset,
         tooltip: '还原',
       ),
-      if (kIsDevMode)
+      if (kDebugMode)
         IconButton(
           icon: Icon(
             _useTestData ? Icons.folder_special : Icons.folder_outlined,
