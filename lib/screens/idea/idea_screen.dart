@@ -8,36 +8,135 @@ import '../../services/dev_mode_auth_service.dart';
 import '../../services/idea_session_storage.dart';
 import '../../widgets/chat_export_sheet.dart';
 import 'idea_bubble.dart';
-import 'session_history_drawer.dart';
 
-/// 想法页：多会话管理，向右滑动打开会话历史抽屉；会话项可右滑展示删除、锁定
+/// 供 MainShell 渲染会话历史 endDrawer 时使用的属性
+class IdeaDrawerProps {
+  final String? currentSessionId;
+  final bool isDevMode;
+  final ValueChanged<IdeaSession> onSessionSelected;
+  final VoidCallback onNewSession;
+  final VoidCallback onSessionsChanged;
+
+  const IdeaDrawerProps({
+    required this.currentSessionId,
+    required this.isDevMode,
+    required this.onSessionSelected,
+    required this.onNewSession,
+    required this.onSessionsChanged,
+  });
+}
+
+/// 想法页：多会话管理，左侧抽屉为个人页、右侧 endDrawer 为会话历史（AppBar 右侧按钮或左滑唤起）；右滑展示消息时间
 class IdeaScreen extends StatefulWidget {
-  const IdeaScreen({super.key});
+  final void Function(IdeaDrawerProps)? onSessionDrawerPropsReady;
+  final void Function(List<Widget>)? onAppBarActionsReady;
+  final VoidCallback? onOpenSessionHistory;
+
+  const IdeaScreen({
+    super.key,
+    this.onSessionDrawerPropsReady,
+    this.onAppBarActionsReady,
+    this.onOpenSessionHistory,
+  });
 
   @override
   State<IdeaScreen> createState() => _IdeaScreenState();
 }
 
-class _IdeaScreenState extends State<IdeaScreen> {
+/// 消息列表条目：时间分割线或气泡
+class _MessageEntry {
+  final bool isDivider;
+  final DateTime? dividerTime;
+  final ChatMessage? message;
+  final int? messageIndex;
+
+  _MessageEntry._({this.isDivider = false, this.dividerTime, this.message, this.messageIndex});
+
+  factory _MessageEntry.divider(DateTime time) =>
+      _MessageEntry._(isDivider: true, dividerTime: time);
+  factory _MessageEntry.bubble(ChatMessage message, int index) =>
+      _MessageEntry._(isDivider: false, message: message, messageIndex: index);
+}
+
+class _IdeaScreenState extends State<IdeaScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   IdeaSession? _currentSession;
   List<ChatMessage> _messages = [];
-  static final DateFormat _timeFmt = DateFormat('MM-dd HH:mm');
+  static final DateFormat _timeFmtFull = DateFormat('yyyy-MM-dd HH:mm');
+
+  /// 右滑展示时间（从左侧滑入）、左滑拉出会话历史（endDrawer）；松手后时间弹回
+  double _dragAccumDx = 0;
+  double? _dragStartX;
+  static const double _dragForFullTime = 80;
+  static const double _dragToOpenSessionHistory = 36;
+  late AnimationController _snapBackController;
+  Animation<double>? _snapBackAnim;
 
   bool get _isDevMode => userDeveloperMode.value;
+
+  static const Duration _messageGapThreshold = Duration(minutes: 5);
+
+  List<_MessageEntry> _buildMessageEntries() {
+    final entries = <_MessageEntry>[];
+    for (var i = 0; i < _messages.length; i++) {
+      final msg = _messages[i];
+      if (i == 0) {
+        entries.add(_MessageEntry.divider(msg.createdAt));
+      } else {
+        final prev = _messages[i - 1];
+        if (msg.createdAt.difference(prev.createdAt) > _messageGapThreshold) {
+          entries.add(_MessageEntry.divider(msg.createdAt));
+        }
+      }
+      entries.add(_MessageEntry.bubble(msg, i));
+    }
+    return entries;
+  }
 
   @override
   void initState() {
     super.initState();
     _loadCurrentSession();
+    _snapBackController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
   }
 
   @override
   void dispose() {
+    _snapBackController.dispose();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _snapBackTime() {
+    final from = _dragAccumDx;
+    if (from <= 0) {
+      setState(() {
+        _dragAccumDx = 0;
+        _dragStartX = null;
+      });
+      return;
+    }
+    _snapBackAnim = Tween<double>(begin: from, end: 0).animate(
+      CurvedAnimation(parent: _snapBackController, curve: Curves.easeOut),
+    );
+    void listener() {
+      if (mounted) setState(() => _dragAccumDx = _snapBackAnim!.value);
+    }
+    _snapBackAnim!.addListener(listener);
+    _snapBackController.forward(from: 0).then((_) {
+      _snapBackAnim?.removeListener(listener);
+      if (mounted) setState(() {
+        _dragAccumDx = 0;
+        _dragStartX = null;
+      });
+      _snapBackController.reset();
+    });
   }
 
   void _loadCurrentSession() {
@@ -148,17 +247,32 @@ class _IdeaScreenState extends State<IdeaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('想法'),
-        actions: [
+    // 延后到 build 结束后再通知父组件，避免在 build 中调用父组件 setState
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onSessionDrawerPropsReady?.call(IdeaDrawerProps(
+        currentSessionId: _currentSession?.id,
+        isDevMode: _isDevMode,
+        onSessionSelected: _switchToSession,
+        onNewSession: _createAndSwitchToNewSession,
+        onSessionsChanged: _loadCurrentSession,
+      ));
+      widget.onAppBarActionsReady?.call([
+        if (widget.onOpenSessionHistory != null)
           IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: '添加会话',
-            onPressed: _addSession,
+            icon: const Icon(Icons.history),
+            tooltip: '会话历史',
+            onPressed: widget.onOpenSessionHistory,
           ),
-        ],
-      ),
+        IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: '添加会话',
+          onPressed: _addSession,
+        ),
+      ]);
+    });
+
+    return Scaffold(
       body: Builder(
         builder: (scaffoldContext) {
           return Column(
@@ -179,25 +293,101 @@ class _IdeaScreenState extends State<IdeaScreen> {
                             ),
                             const SizedBox(height: 16),
                             OutlinedButton.icon(
-                              onPressed: () => Scaffold.of(scaffoldContext).openEndDrawer(),
+                              onPressed: widget.onOpenSessionHistory != null
+                                  ? widget.onOpenSessionHistory!
+                                  : () => Scaffold.of(scaffoldContext).openEndDrawer(),
                               icon: const Icon(Icons.history),
                               label: const Text('会话历史'),
                             ),
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = _messages[index];
-                          return IdeaBubble(
-                            message: msg,
-                            timeStr: _timeFmt.format(msg.createdAt),
+                    : Builder(
+                        builder: (context) {
+                          final messageEntries = _buildMessageEntries();
+                          final timeVisibility = (_dragAccumDx / _dragForFullTime)
+                              .clamp(0.0, 1.0);
+                          return Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: (_) {
+                              _dragStartX = null;
+                            },
+                            onPointerMove: (e) {
+                              if (_dragStartX == null) _dragStartX = e.position.dx;
+                              final dx = e.delta.dx;
+                              final dy = e.delta.dy;
+                              if (dy.abs() > 2 * dx.abs()) return;
+                              setState(() {
+                                _dragAccumDx += dx;
+                                if (_dragAccumDx < -_dragToOpenSessionHistory) {
+                                  _dragAccumDx = 0;
+                                  _dragStartX = null;
+                                  widget.onOpenSessionHistory?.call();
+                                }
+                              });
+                            },
+                            onPointerUp: (_) {
+                              _snapBackTime();
+                            },
+                            onPointerCancel: (_) {
+                              _snapBackTime();
+                            },
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              itemCount: messageEntries.length,
+                              itemBuilder: (context, index) {
+                                final entry = messageEntries[index];
+                            if (entry.isDivider) {
+                              final timeStr =
+                                  _timeFmtFull.format(entry.dividerTime!);
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                        child: Divider(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .outlineVariant),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12),
+                                      child: Text(
+                                        timeStr,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                        child: Divider(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .outlineVariant),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            final msg = entry.message!;
+                            return IdeaBubble(
+                              message: msg,
+                              timeStr: _timeFmtFull.format(msg.createdAt),
+                              showTimeAmount: timeVisibility,
+                            );
+                          },
+                            ),
                           );
                         },
                       ),
@@ -208,11 +398,6 @@ class _IdeaScreenState extends State<IdeaScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    IconButton(
-                      onPressed: () => Scaffold.of(scaffoldContext).openEndDrawer(),
-                      icon: const Icon(Icons.menu),
-                      tooltip: '会话历史',
-                    ),
                     Expanded(
                       child: TextField(
                         controller: _controller,
@@ -242,13 +427,6 @@ class _IdeaScreenState extends State<IdeaScreen> {
             ],
           );
         },
-      ),
-      endDrawer: SessionHistoryDrawer(
-        currentSessionId: _currentSession?.id,
-        isDevMode: _isDevMode,
-        onSessionSelected: _switchToSession,
-        onNewSession: _createAndSwitchToNewSession,
-        onSessionsChanged: _loadCurrentSession,
       ),
       floatingActionButton: _messages.isEmpty
           ? null

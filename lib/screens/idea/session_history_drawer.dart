@@ -8,7 +8,7 @@ import 'delete_confirm_dialog.dart';
 import 'session_edit_sheet.dart';
 import 'session_list_entry.dart';
 
-/// 会话历史抽屉：分栏（星标/刚刚/七天内/一月内/其他），右滑删除/锁定，长按编辑（含星标）
+/// 会话历史抽屉：分栏（星标/刚刚/七天内/一月内/其他），左滑删除/右滑锁定，右侧星标按钮可点击切换，长按编辑
 class SessionHistoryDrawer extends StatefulWidget {
   final String? currentSessionId;
   final bool isDevMode;
@@ -55,6 +55,13 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     widget.onSessionsChanged();
   }
 
+  Future<void> _onToggleStar(IdeaSession session) async {
+    final updated = session.copyWith(isStarred: !session.isStarred);
+    await IdeaSessionStorage.saveSession(updated);
+    _refresh();
+    widget.onSessionsChanged();
+  }
+
   Future<void> _onSwipeDelete(IdeaSession session) async {
     await _onDelete(session);
   }
@@ -71,6 +78,19 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     }
   }
 
+  /// 开发者模式下，对已隐藏会话长按确认则取消隐藏
+  Future<void> _onUnhide(IdeaSession session) async {
+    final updated = session.copyWith(isHidden: false);
+    await IdeaSessionStorage.saveSession(updated);
+    _refresh();
+    widget.onSessionsChanged();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已取消隐藏')),
+      );
+    }
+  }
+
   Future<void> _onDelete(IdeaSession session) async {
     final result = await showDialog<DeleteConfirmResult>(
       context: context,
@@ -78,7 +98,11 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     );
     if (result == null || result == DeleteConfirmResult.cancel || !mounted) return;
     if (result == DeleteConfirmResult.setHidden) {
-      await _onSetHidden(session);
+      if (widget.isDevMode && session.isHidden) {
+        await _onUnhide(session);
+      } else {
+        await _onSetHidden(session);
+      }
       return;
     }
     await IdeaSessionStorage.deleteSession(session.id);
@@ -248,6 +272,12 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                           key: ValueKey(session.id),
                           height: 64,
                           leftAction: SwipeActionConfig(
+                            icon: Icons.delete_outline,
+                            backgroundColor: theme.colorScheme.error,
+                            iconColor: theme.colorScheme.onError,
+                            onTrigger: () => _onSwipeDelete(session),
+                          ),
+                          rightAction: SwipeActionConfig(
                             icon: isLocked ? Icons.lock_open : Icons.lock,
                             backgroundColor: isLocked
                                 ? Colors.green.shade200
@@ -256,12 +286,6 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                                 ? Colors.green.shade900
                                 : Colors.amber.shade900,
                             onTrigger: () => _onLock(session),
-                          ),
-                          rightAction: SwipeActionConfig(
-                            icon: Icons.delete_outline,
-                            backgroundColor: theme.colorScheme.error,
-                            iconColor: theme.colorScheme.onError,
-                            onTrigger: () => _onSwipeDelete(session),
                           ),
                           child: Center(
                             child: Material(
@@ -302,16 +326,26 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (session.isStarred)
-                                      Icon(Icons.star,
-                                          size: 20,
-                                          color: Colors.amber.shade700),
-                                    if (isLocked) ...[
-                                      if (session.isStarred) const SizedBox(width: 4),
+                                    IconButton(
+                                      icon: Icon(
+                                        session.isStarred
+                                            ? Icons.star
+                                            : Icons.star_border,
+                                        size: 22,
+                                        color: session.isStarred
+                                            ? Colors.amber.shade700
+                                            : theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                      onPressed: () => _onToggleStar(session),
+                                      style: IconButton.styleFrom(
+                                        padding: const EdgeInsets.all(4),
+                                        minimumSize: const Size(36, 36),
+                                      ),
+                                    ),
+                                    if (isLocked)
                                       Icon(Icons.lock,
                                           size: 20,
                                           color: theme.colorScheme.primary),
-                                    ],
                                   ],
                                 ),
                                 onTap: () =>

@@ -10,6 +10,7 @@ import '../widgets/hourly_prompt_dialog.dart';
 import 'about_screen.dart';
 import 'event/event_screen.dart';
 import 'idea/idea_screen.dart';
+import 'idea/session_history_drawer.dart';
 import 'settings_screen.dart';
 import 'smart/smart_screen.dart';
 import 'status/status_screen.dart';
@@ -29,6 +30,9 @@ class _MainShellState extends State<MainShell> {
   Timer? _aboutTapTimer;
   Timer? _aboutOpenTimer;
   List<Widget>? _eventAppBarActions;
+  IdeaDrawerProps? _ideaDrawerProps;
+  List<Widget>? _ideaAppBarActions;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static const List<_NavItem> _items = [
     _NavItem(label: '事件', icon: Icons.event_note),
@@ -51,7 +55,15 @@ class _MainShellState extends State<MainShell> {
       ),
       const StatusScreen(),
       const SmartScreen(),
-      const IdeaScreen(),
+      IdeaScreen(
+        onSessionDrawerPropsReady: (p) {
+          if (mounted) setState(() => _ideaDrawerProps = p);
+        },
+        onAppBarActionsReady: (actions) {
+          if (mounted) setState(() => _ideaAppBarActions = actions);
+        },
+        onOpenSessionHistory: () => _scaffoldKey.currentState?.openEndDrawer(),
+      ),
       const StatsScreen(),
     ];
     HourlyPromptService.setShowPrompt((hourToRecord) {
@@ -142,10 +154,13 @@ class _MainShellState extends State<MainShell> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text(_items[_currentIndex].label),
         backgroundColor: colorScheme.inversePrimary,
-        actions: _currentIndex == 0 ? (_eventAppBarActions ?? []) : null,
+        actions: _currentIndex == 0
+            ? (_eventAppBarActions ?? [])
+            : (_currentIndex == 3 ? (_ideaAppBarActions ?? []) : null),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -225,6 +240,15 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
       ),
+      endDrawer: _currentIndex == 3 && _ideaDrawerProps != null
+          ? SessionHistoryDrawer(
+              currentSessionId: _ideaDrawerProps!.currentSessionId,
+              isDevMode: _ideaDrawerProps!.isDevMode,
+              onSessionSelected: _ideaDrawerProps!.onSessionSelected,
+              onNewSession: _ideaDrawerProps!.onNewSession,
+              onSessionsChanged: _ideaDrawerProps!.onSessionsChanged,
+            )
+          : null,
       body: IndexedStack(
         index: _currentIndex,
         children: _pages,
