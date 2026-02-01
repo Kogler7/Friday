@@ -17,6 +17,10 @@ class SettingsService {
 
   static SettingsPreferences get current => _current;
 
+  /// 设置变更时通知（如主题），根组件监听后重建以应用新主题；启动前为默认值，init 后更新为持久化值
+  static final ValueNotifier<SettingsPreferences> currentNotifier =
+      ValueNotifier(const SettingsPreferences());
+
   static bool _initialized = false;
   static bool get isInitialized => _initialized;
 
@@ -24,6 +28,7 @@ class SettingsService {
     if (_initialized) return;
     _prefs = await SharedPreferences.getInstance();
     await _load();
+    currentNotifier.value = _current;
     _initialized = true;
   }
 
@@ -38,6 +43,7 @@ class SettingsService {
 
   static Future<void> save(SettingsPreferences prefs) async {
     _current = prefs;
+    currentNotifier.value = prefs;
     final map = _toJson(prefs);
     await _prefs.setString(_keySettings, jsonEncode(map));
   }
@@ -51,10 +57,16 @@ class SettingsService {
       'quietEndHour': p.quietPeriodEnd.hour,
       'quietEndMinute': p.quietPeriodEnd.minute,
       'quietDefaultState': p.quietPeriodDefaultState.value,
+      'themeMode': p.themeMode.index,
+      'seedColorValue': p.seedColorValue,
     };
   }
 
   static SettingsPreferences _fromJson(Map<String, dynamic> map) {
+    final themeIndex = (map['themeMode'] as num?)?.toInt();
+    final themeMode = themeIndex != null && themeIndex >= 0 && themeIndex < ThemeMode.values.length
+        ? ThemeMode.values[themeIndex]
+        : ThemeMode.system;
     return SettingsPreferences(
       statUnitMinutes: (map['statUnitMinutes'] as num?)?.toInt() ?? 20,
       reminderIntervalMinutes:
@@ -70,6 +82,8 @@ class SettingsService {
       quietPeriodDefaultState: ActivityStateExtension.fromValue(
         map['quietDefaultState'] as String? ?? 'resting',
       ),
+      themeMode: themeMode,
+      seedColorValue: (map['seedColorValue'] as num?)?.toInt() ?? 0xFF673AB7,
     );
   }
 }

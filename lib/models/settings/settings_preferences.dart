@@ -19,12 +19,20 @@ class SettingsPreferences {
   /// 静默时段内未记录时默认状态（如休息）
   final ActivityState quietPeriodDefaultState;
 
+  /// 主题模式：跟随系统 / 浅色 / 深色
+  final ThemeMode themeMode;
+
+  /// 主题色（Color.value），用于 ColorScheme.fromSeed
+  final int seedColorValue;
+
   const SettingsPreferences({
     this.statUnitMinutes = 20,
     this.reminderIntervalMinutes = 60,
     this.quietPeriodStart = const TimeOfDay(hour: 2, minute: 0),
     this.quietPeriodEnd = const TimeOfDay(hour: 10, minute: 0),
     this.quietPeriodDefaultState = ActivityState.resting,
+    this.themeMode = ThemeMode.system,
+    this.seedColorValue = 0xFF673AB7,
   });
 
   /// 某时刻是否处于静默时段（2:00～10:00 视为静默，不含 10:00）
@@ -58,6 +66,8 @@ class SettingsPreferences {
     TimeOfDay? quietPeriodStart,
     TimeOfDay? quietPeriodEnd,
     ActivityState? quietPeriodDefaultState,
+    ThemeMode? themeMode,
+    int? seedColorValue,
   }) {
     return SettingsPreferences(
       statUnitMinutes: statUnitMinutes ?? this.statUnitMinutes,
@@ -67,6 +77,8 @@ class SettingsPreferences {
       quietPeriodEnd: quietPeriodEnd ?? this.quietPeriodEnd,
       quietPeriodDefaultState:
           quietPeriodDefaultState ?? this.quietPeriodDefaultState,
+      themeMode: themeMode ?? this.themeMode,
+      seedColorValue: seedColorValue ?? this.seedColorValue,
     );
   }
 }

@@ -30,13 +30,19 @@ class _PlanPlusAppState extends State<PlanPlusApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     userDeveloperMode.addListener(_onUserDevModeChanged);
+    SettingsService.currentNotifier.addListener(_onSettingsChanged);
   }
 
   @override
   void dispose() {
     userDeveloperMode.removeListener(_onUserDevModeChanged);
+    SettingsService.currentNotifier.removeListener(_onSettingsChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onUserDevModeChanged() {
@@ -54,13 +60,20 @@ class _PlanPlusAppState extends State<PlanPlusApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final prefs = SettingsService.currentNotifier.value;
+    final seedColor = Color(prefs.seedColorValue);
     return MaterialApp(
       title: 'PlanPlus',
       debugShowCheckedModeBanner: kIsDevMode && _userDevMode,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
         useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark),
+        useMaterial3: true,
+      ),
+      themeMode: prefs.themeMode,
       home: const _AppLoader(),
     );
   }

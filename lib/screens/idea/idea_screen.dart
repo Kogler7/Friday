@@ -71,6 +71,9 @@ class _IdeaScreenState extends State<IdeaScreen>
   bool _multiSelectMode = false;
   final Set<int> _selectedIndices = <int>{};
 
+  /// 输入框是否展开为接近全屏高度
+  bool _inputExpanded = false;
+
   /// 右滑展示时间（从左侧滑入）、左滑拉出会话历史（endDrawer）；松手后时间弹回
   double _dragAccumDx = 0;
   double? _dragStartX;
@@ -108,14 +111,23 @@ class _IdeaScreenState extends State<IdeaScreen>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
+    userDeveloperMode.addListener(_onUserDevModeChanged);
   }
 
   @override
   void dispose() {
+    userDeveloperMode.removeListener(_onUserDevModeChanged);
     _snapBackController.dispose();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onUserDevModeChanged() {
+    if (userDeveloperMode.value) return;
+    IdeaSessionStorage.ensureCurrentSessionVisible().then((_) {
+      if (mounted) _loadCurrentSession();
+    });
   }
 
   void _snapBackTime() {
@@ -313,34 +325,48 @@ class _IdeaScreenState extends State<IdeaScreen>
     return Scaffold(
       body: Builder(
         builder: (scaffoldContext) {
+          if (_inputExpanded) {
+            return Column(
+              children: [
+                Expanded(child: _buildExpandedInput()),
+              ],
+            );
+          }
           return Column(
             children: [
               Expanded(
-                child: _messages.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _currentSession == null
-                                  ? '选择或新建一个会话开始记录想法'
-                                  : '写点什么吧，记录你的想法',
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              onPressed: widget.onOpenSessionHistory != null
-                                  ? widget.onOpenSessionHistory!
-                                  : () => Scaffold.of(scaffoldContext).openEndDrawer(),
-                              icon: const Icon(Icons.history),
-                              label: const Text('会话历史'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Builder(
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (_) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) FocusManager.instance.primaryFocus?.unfocus();
+                    });
+                  },
+                  child: _messages.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _currentSession == null
+                                    ? '选择或新建一个会话开始记录想法'
+                                    : '写点什么吧，记录你的想法',
+                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                              const SizedBox(height: 16),
+                              OutlinedButton.icon(
+                                onPressed: widget.onOpenSessionHistory != null
+                                    ? widget.onOpenSessionHistory!
+                                    : () => Scaffold.of(scaffoldContext).openEndDrawer(),
+                                icon: const Icon(Icons.history),
+                                label: const Text('会话历史'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Builder(
                         builder: (context) {
                           final messageEntries = _buildMessageEntries();
                           final timeVisibility = (_dragAccumDx / _dragForFullTime)
@@ -476,6 +502,7 @@ class _IdeaScreenState extends State<IdeaScreen>
                           );
                         },
                       ),
+                ),
               ),
               const Divider(height: 1),
               Padding(
@@ -500,7 +527,13 @@ class _IdeaScreenState extends State<IdeaScreen>
                         onSubmitted: (_) => _send(),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () => setState(() => _inputExpanded = true),
+                      icon: const Icon(Icons.unfold_more),
+                      tooltip: '展开输入',
+                    ),
+                    const SizedBox(width: 4),
                     IconButton.filled(
                       onPressed: _send,
                       icon: const Icon(Icons.send),
@@ -513,6 +546,57 @@ class _IdeaScreenState extends State<IdeaScreen>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildExpandedInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: TextField(
+              controller: _controller,
+              maxLines: null,
+              minLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              decoration: const InputDecoration(
+                hintText: '记录想法…',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                alignLabelWithHint: true,
+              ),
+              textInputAction: TextInputAction.newline,
+              onSubmitted: (_) {},
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                onPressed: () => setState(() => _inputExpanded = false),
+                icon: const Icon(Icons.unfold_less),
+                tooltip: '收起',
+              ),
+              const SizedBox(width: 4),
+              IconButton.filled(
+                onPressed: _send,
+                icon: const Icon(Icons.send),
+                tooltip: '发送',
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

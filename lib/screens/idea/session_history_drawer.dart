@@ -78,7 +78,6 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     }
   }
 
-  /// 开发者模式下，对已隐藏会话长按确认则取消隐藏
   Future<void> _onUnhide(IdeaSession session) async {
     final updated = session.copyWith(isHidden: false);
     await IdeaSessionStorage.saveSession(updated);
@@ -86,7 +85,7 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     widget.onSessionsChanged();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已取消隐藏')),
+        const SnackBar(content: Text('已删除会话')),
       );
     }
   }

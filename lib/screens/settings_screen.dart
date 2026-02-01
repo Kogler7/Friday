@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../models/activity/activity_state.dart';
-import '../models/settings/settings_preferences.dart';
 import '../services/settings_service.dart';
+
+/// 内置主题色选项（名称 + Color.value）
+const List<({String label, int value})> _builtInSeedColors = [
+  (label: '紫色', value: 0xFF673AB7),
+  (label: '蓝色', value: 0xFF2196F3),
+  (label: '青色', value: 0xFF009688),
+  (label: '绿色', value: 0xFF4CAF50),
+  (label: '橙色', value: 0xFFFF9800),
+  (label: '红色', value: 0xFFF44336),
+  (label: '粉色', value: 0xFFE91E63),
+];
 
 /// 状态统计与提醒设置页（入口：主页右上角）
 class SettingsScreen extends StatefulWidget {
@@ -18,6 +28,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TimeOfDay _quietStart;
   late TimeOfDay _quietEnd;
   late ActivityState _quietDefaultState;
+  late ThemeMode _themeMode;
+  late int _seedColorValue;
 
   @override
   void initState() {
@@ -28,16 +40,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _quietStart = p.quietPeriodStart;
     _quietEnd = p.quietPeriodEnd;
     _quietDefaultState = p.quietPeriodDefaultState;
+    _themeMode = p.themeMode;
+    _seedColorValue = p.seedColorValue;
+  }
+
+  Future<void> _saveTheme(ThemeMode? themeMode, int? seedColorValue) async {
+    final next = themeMode ?? _themeMode;
+    final color = seedColorValue ?? _seedColorValue;
+    await SettingsService.save(
+      SettingsService.current.copyWith(themeMode: next, seedColorValue: color),
+    );
+    if (themeMode != null) setState(() => _themeMode = next);
+    if (seedColorValue != null) setState(() => _seedColorValue = color);
+  }
+
+  static Color _contrastColor(Color bg) {
+    final luminance = bg.computeLuminance();
+    return luminance > 0.4 ? Colors.black87 : Colors.white;
   }
 
   Future<void> _save() async {
-    await SettingsService.save(SettingsPreferences(
-      statUnitMinutes: _statUnitMinutes,
-      reminderIntervalMinutes: _reminderIntervalMinutes,
-      quietPeriodStart: _quietStart,
-      quietPeriodEnd: _quietEnd,
-      quietPeriodDefaultState: _quietDefaultState,
-    ));
+    await SettingsService.save(
+      SettingsService.current.copyWith(
+        statUnitMinutes: _statUnitMinutes,
+        reminderIntervalMinutes: _reminderIntervalMinutes,
+        quietPeriodStart: _quietStart,
+        quietPeriodEnd: _quietEnd,
+        quietPeriodDefaultState: _quietDefaultState,
+      ),
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('设置已保存')),
@@ -63,6 +94,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const Text(
+            '主题',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '外观',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        label: Text('跟随系统'),
+                        icon: Icon(Icons.brightness_auto),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        label: Text('浅色'),
+                        icon: Icon(Icons.light_mode),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        label: Text('深色'),
+                        icon: Icon(Icons.dark_mode),
+                      ),
+                    ],
+                    selected: {_themeMode},
+                    onSelectionChanged: (Set<ThemeMode> selected) {
+                      final mode = selected.first;
+                      _saveTheme(mode, null);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '主题色',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: _builtInSeedColors.map((e) {
+                      final isSelected = _seedColorValue == e.value;
+                      return Tooltip(
+                        message: e.label,
+                        child: Material(
+                          color: Color(e.value),
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _saveTheme(null, e.value),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: isSelected
+                                    ? Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                        width: 3,
+                                      )
+                                    : null,
+                              ),
+                              child: isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      color: _contrastColor(Color(e.value)),
+                                      size: 22,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 24),
           const Text(
             '状态统计',
             style: TextStyle(
