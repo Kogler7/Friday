@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../models/activity/activity_state.dart';
+import '../services/activity_tag_storage.dart';
 import '../services/settings_service.dart';
+import '../services/status_preset_storage.dart';
 
 /// 内置主题色选项（名称 + Color.value）
 const List<({String label, int value})> _builtInSeedColors = [
@@ -27,7 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late int _reminderIntervalMinutes;
   late TimeOfDay _quietStart;
   late TimeOfDay _quietEnd;
-  late ActivityState _quietDefaultState;
+  late String? _quietDefaultPresetId;
   late ThemeMode _themeMode;
   late int _seedColorValue;
 
@@ -39,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _reminderIntervalMinutes = p.reminderIntervalMinutes;
     _quietStart = p.quietPeriodStart;
     _quietEnd = p.quietPeriodEnd;
-    _quietDefaultState = p.quietPeriodDefaultState;
+    _quietDefaultPresetId = p.quietPeriodDefaultPresetId ?? 'builtin_resting';
     _themeMode = p.themeMode;
     _seedColorValue = p.seedColorValue;
   }
@@ -66,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         reminderIntervalMinutes: _reminderIntervalMinutes,
         quietPeriodStart: _quietStart,
         quietPeriodEnd: _quietEnd,
-        quietPeriodDefaultState: _quietDefaultState,
+        quietPeriodDefaultPresetId: _quietDefaultPresetId,
       ),
     );
     if (mounted) {
@@ -277,23 +278,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           ListTile(
-            title: const Text('静默时段默认状态'),
-            subtitle: const Text('该时段内不提醒，未记录时自动记为该状态'),
-            trailing: DropdownButton<ActivityState>(
-              value: _quietDefaultState,
-              items: ActivityState.values
-                  .map((s) => DropdownMenuItem(
-                        value: s,
-                        child: Text(s.displayName),
-                      ))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) setState(() => _quietDefaultState = v);
+            title: const Text('活动标签管理'),
+            subtitle: const Text('隐藏后不会在填写时显示'),
+            trailing: const Icon(Icons.label_outline),
+            onTap: () => _showTagManagement(context),
+          ),
+          ListTile(
+            title: const Text('静默时段默认预设'),
+            subtitle: const Text('该时段内不提醒，未记录时自动记为该预设'),
+            trailing: Builder(
+              builder: (context) {
+                final presets = StatusPresetStorage.getAll();
+                return DropdownButton<String>(
+                  value: presets.any((p) => p.id == _quietDefaultPresetId)
+                      ? _quietDefaultPresetId
+                      : (presets.isNotEmpty ? presets.first.id : null),
+                  items: presets
+                      .map((p) => DropdownMenuItem(
+                            value: p.id,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(p.icon, size: 20, color: p.color),
+                                const SizedBox(width: 8),
+                                Text(p.name),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _quietDefaultPresetId = v);
+                  },
+                );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+
+  void _showTagManagement(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final tags = ActivityTagStorage.getAll();
+            return AlertDialog(
+              title: const Text('活动标签'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: tags.length,
+                  itemBuilder: (_, i) {
+                    final t = tags[i];
+                    return SwitchListTile(
+                      title: Text(t.name),
+                      subtitle: Text(t.hidden ? '已隐藏' : '可见'),
+                      value: !t.hidden,
+                      onChanged: (v) async {
+                        await ActivityTagStorage.setHidden(t.name, !v);
+                        setState(() {});
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('关闭'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

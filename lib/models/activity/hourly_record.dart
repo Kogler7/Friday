@@ -1,13 +1,13 @@
-import 'activity_state.dart';
+import '../status/status_record_data.dart';
 
-/// 某一小时的状态记录（小时粒度，如 2025-01-30 14:00 表示 14:00~15:00）
+/// 某一小时/时段的状态记录
 class HourlyRecord {
-  final DateTime hourStart; // 该小时的开始时间（分秒为 0）
-  final ActivityState state;
+  final DateTime hourStart;
+  final StatusRecordData data;
 
   const HourlyRecord({
     required this.hourStart,
-    required this.state,
+    required this.data,
   });
 
   String get dateKey {
@@ -16,7 +16,6 @@ class HourlyRecord {
 
   int get hourOfDay => hourStart.hour;
 
-  /// 展示用时间范围。[unitMinutes] 为统计单位（默认 20），开发模式 2 分钟槽仍按 2 分钟显示。
   String displayTimeRange({int unitMinutes = 20}) {
     final h = hourStart.hour;
     final m = hourStart.minute;
@@ -32,15 +31,21 @@ class HourlyRecord {
     return '${pad(h)}:${pad(m)} - ${pad(endH)}:${pad(endM)}';
   }
 
+  /// 主要标签（用于图表聚合），取第一个标签或摘要
+  String get primaryTag =>
+      data.tagIds.isNotEmpty ? data.tagIds.first : data.summary;
+
   Map<String, dynamic> toJson() => {
         'hourStart': hourStart.toIso8601String(),
-        'state': state.value,
+        'data': data.toJson(),
       };
 
   factory HourlyRecord.fromJson(Map<String, dynamic> json) {
-    return HourlyRecord(
-      hourStart: DateTime.parse(json['hourStart'] as String),
-      state: ActivityStateExtension.fromValue(json['state'] as String),
-    );
+    final hourStart = DateTime.parse(json['hourStart'] as String);
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    final data = dataJson != null
+        ? StatusRecordData.fromJson(dataJson)
+        : const StatusRecordData();
+    return HourlyRecord(hourStart: hourStart, data: data);
   }
 }

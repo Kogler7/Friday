@@ -1,11 +1,10 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../models/activity/activity_state.dart';
 import '../models/activity/hourly_record.dart';
 import '../services/settings_service.dart';
 
-/// 当日汇总：饼图（工作/休息/娱乐占比，按统计单位计数）+ 柱状图（24 小时分布）
+/// 当日汇总：饼图（按活动标签占比）+ 柱状图（24 小时分布）
 class DailyChart extends StatelessWidget {
   final List<HourlyRecord> records;
   final DateTime date;
@@ -16,41 +15,43 @@ class DailyChart extends StatelessWidget {
     required this.date,
   });
 
+  static const List<Color> _tagColors = [
+    Color(0xFF2196F3), // 蓝
+    Color(0xFFFF9800), // 橙
+    Color(0xFF4CAF50), // 绿
+    Color(0xFF9C27B0), // 紫
+    Color(0xFF00BCD4), // 青
+    Color(0xFF795548), // 棕
+    Color(0xFF607D8B), // 灰
+  ];
+
+  Map<String, int> _aggregateByTag() {
+    final map = <String, int>{};
+    for (final r in records) {
+      final tag = r.primaryTag;
+      map[tag] = (map[tag] ?? 0) + 1;
+    }
+    return map;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final work = records.where((r) => r.state == ActivityState.working).length;
-    final rest = records.where((r) => r.state == ActivityState.resting).length;
-    final entertainment =
-        records.where((r) => r.state == ActivityState.entertainment).length;
+    final agg = _aggregateByTag();
+    final entries = agg.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final total = records.length;
     final unitMin = SettingsService.isInitialized
         ? SettingsService.current.statUnitMinutes
         : 20;
     final unitLabel = unitMin == 60 ? '小时' : '单位';
+
     final sections = <PieChartSectionData>[];
-    if (work > 0) {
+    for (var i = 0; i < entries.length && i < 7; i++) {
+      final e = entries[i];
       sections.add(PieChartSectionData(
-        value: work.toDouble(),
-        title: '$work${unitMin == 60 ? 'h' : '单'}',
-        color: Colors.blue,
-        radius: 48,
-        titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
-      ));
-    }
-    if (rest > 0) {
-      sections.add(PieChartSectionData(
-        value: rest.toDouble(),
-        title: '$rest${unitMin == 60 ? 'h' : '单'}',
-        color: Colors.orange,
-        radius: 48,
-        titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
-      ));
-    }
-    if (entertainment > 0) {
-      sections.add(PieChartSectionData(
-        value: entertainment.toDouble(),
-        title: '$entertainment${unitMin == 60 ? 'h' : '单'}',
-        color: Colors.green,
+        value: e.value.toDouble(),
+        title: '${e.value}${unitMin == 60 ? 'h' : '单'}',
+        color: _tagColors[i % _tagColors.length],
         radius: 48,
         titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
       ));
@@ -85,7 +86,7 @@ class DailyChart extends StatelessWidget {
                   flex: 1,
                   child: sections.isEmpty
                       ? const Center(child: Text('无数据'))
-                      :                       PieChart(
+                      : PieChart(
                           PieChartData(
                             sections: sections,
                             sectionsSpace: 2,
@@ -100,18 +101,12 @@ class DailyChart extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _LegendItem(
-                        color: Colors.blue,
-                        label: '工作 $work $unitLabel${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
-                      ),
-                      _LegendItem(
-                        color: Colors.orange,
-                        label: '休息 $rest $unitLabel${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
-                      ),
-                      _LegendItem(
-                        color: Colors.green,
-                        label: '娱乐 $entertainment $unitLabel${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
-                      ),
+                      for (var i = 0; i < entries.length && i < 5; i++)
+                        _LegendItem(
+                          color: _tagColors[i % _tagColors.length],
+                          label: '${entries[i].key} ${entries[i].value} $unitLabel'
+                              '${unitMin == 60 ? '' : '（每单位$unitMin分钟）'}',
+                        ),
                     ],
                   ),
                 ),
@@ -120,7 +115,7 @@ class DailyChart extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            '24 小时分布（蓝=工作 橙=休息 绿=娱乐）',
+            '24 小时分布',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
@@ -129,20 +124,22 @@ class DailyChart extends StatelessWidget {
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
-                maxY: 3.5,
+                maxY: (entries.isEmpty ? 1 : entries.length).toDouble() + 0.5,
                 barTouchData: BarTouchData(enabled: false),
                 titlesData: FlTitlesData(
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 28,
+                      reservedSize: 32,
                       getTitlesWidget: (value, meta) {
-                        final v = value.toInt();
-                        if (v == 0) return const Text('');
-                        if (v == 1) return const Text('娱乐', style: TextStyle(fontSize: 10));
-                        if (v == 2) return const Text('休息', style: TextStyle(fontSize: 10));
-                        if (v == 3) return const Text('工作', style: TextStyle(fontSize: 10));
-                        return const Text('');
+                        final idx = value.toInt();
+                        if (idx < 1 || idx > entries.length) return const Text('');
+                        return Text(
+                          entries[idx - 1].key,
+                          style: const TextStyle(fontSize: 9),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
                       },
                     ),
                   ),
@@ -170,20 +167,10 @@ class DailyChart extends StatelessWidget {
                   Color color = Colors.grey.withValues(alpha: 0.2);
                   double value = 0;
                   if (r != null) {
-                    switch (r.state) {
-                      case ActivityState.working:
-                        color = Colors.blue;
-                        value = 3;
-                        break;
-                      case ActivityState.resting:
-                        color = Colors.orange;
-                        value = 2;
-                        break;
-                      case ActivityState.entertainment:
-                        color = Colors.green;
-                        value = 1;
-                        break;
-                    }
+                    final tag = r.primaryTag;
+                    final idx = entries.indexWhere((e) => e.key == tag);
+                    value = idx >= 0 ? idx + 1.0 : 0.5;
+                    color = idx >= 0 ? _tagColors[idx % _tagColors.length] : Colors.grey;
                   }
                   return BarChartGroupData(
                     x: i,

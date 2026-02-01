@@ -25,15 +25,16 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   List<Widget>? _eventAppBarActions;
+  List<Widget>? _statusAppBarActions;
   IdeaDrawerProps? _ideaDrawerProps;
   List<Widget>? _ideaAppBarActions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static const List<_NavItem> _items = [
-    _NavItem(label: '事件', icon: Icons.event_note),
-    _NavItem(label: '状态', icon: Icons.pie_chart_outline),
-    _NavItem(label: '智能', icon: Icons.mic),
+    _NavItem(label: '日程', icon: Icons.event_note),
     _NavItem(label: '想法', icon: Icons.lightbulb_outline),
+    _NavItem(label: '智能', icon: Icons.mic),
+    _NavItem(label: '状态', icon: Icons.pie_chart_outline),
     _NavItem(label: '统计', icon: Icons.analytics_outlined),
   ];
 
@@ -48,8 +49,6 @@ class _MainShellState extends State<MainShell> {
           if (mounted) setState(() => _eventAppBarActions = actions);
         },
       ),
-      const StatusScreen(),
-      const SmartScreen(),
       IdeaScreen(
         onSessionDrawerPropsReady: (p) {
           if (mounted) setState(() => _ideaDrawerProps = p);
@@ -58,6 +57,12 @@ class _MainShellState extends State<MainShell> {
           if (mounted) setState(() => _ideaAppBarActions = actions);
         },
         onOpenSessionHistory: () => _scaffoldKey.currentState?.openEndDrawer(),
+      ),
+      const SmartScreen(),
+      StatusScreen(
+        onAppBarActionsReady: (actions) {
+          if (mounted) setState(() => _statusAppBarActions = actions);
+        },
       ),
       const StatsScreen(),
     ];
@@ -138,7 +143,9 @@ class _MainShellState extends State<MainShell> {
         backgroundColor: colorScheme.inversePrimary,
         actions: _currentIndex == 0
             ? (_eventAppBarActions ?? [])
-            : (_currentIndex == 3 ? (_ideaAppBarActions ?? []) : null),
+            : _currentIndex == 1
+                ? (_ideaAppBarActions ?? [])
+                : (_currentIndex == 3 ? (_statusAppBarActions ?? []) : null),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -224,7 +231,7 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
       ),
-      endDrawer: _currentIndex == 3 && _ideaDrawerProps != null
+      endDrawer: _currentIndex == 1 && _ideaDrawerProps != null
           ? SessionHistoryDrawer(
               currentSessionId: _ideaDrawerProps!.currentSessionId,
               isDevMode: _ideaDrawerProps!.isDevMode,

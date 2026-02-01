@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../activity/activity_state.dart';
-
 /// 状态统计与提醒相关设置（可扩展，后期支持批量修改）
 class SettingsPreferences {
   /// 状态统计单位（分钟），如 20 表示每 20 分钟一个单位
@@ -16,8 +14,8 @@ class SettingsPreferences {
   /// 静默时段结束（不提醒），如 10:00，跨日表示次日早上
   final TimeOfDay quietPeriodEnd;
 
-  /// 静默时段内未记录时默认状态（如休息）
-  final ActivityState quietPeriodDefaultState;
+  /// 静默时段内未记录时默认预设 ID（对应 StatusPreset.id）
+  final String? quietPeriodDefaultPresetId;
 
   /// 主题模式：跟随系统 / 浅色 / 深色
   final ThemeMode themeMode;
@@ -30,7 +28,7 @@ class SettingsPreferences {
     this.reminderIntervalMinutes = 60,
     this.quietPeriodStart = const TimeOfDay(hour: 2, minute: 0),
     this.quietPeriodEnd = const TimeOfDay(hour: 10, minute: 0),
-    this.quietPeriodDefaultState = ActivityState.resting,
+    this.quietPeriodDefaultPresetId,
     this.themeMode = ThemeMode.system,
     this.seedColorValue = 0xFF673AB7,
   });
@@ -65,7 +63,7 @@ class SettingsPreferences {
     int? reminderIntervalMinutes,
     TimeOfDay? quietPeriodStart,
     TimeOfDay? quietPeriodEnd,
-    ActivityState? quietPeriodDefaultState,
+    String? quietPeriodDefaultPresetId,
     ThemeMode? themeMode,
     int? seedColorValue,
   }) {
@@ -75,8 +73,8 @@ class SettingsPreferences {
           reminderIntervalMinutes ?? this.reminderIntervalMinutes,
       quietPeriodStart: quietPeriodStart ?? this.quietPeriodStart,
       quietPeriodEnd: quietPeriodEnd ?? this.quietPeriodEnd,
-      quietPeriodDefaultState:
-          quietPeriodDefaultState ?? this.quietPeriodDefaultState,
+      quietPeriodDefaultPresetId:
+          quietPeriodDefaultPresetId ?? this.quietPeriodDefaultPresetId,
       themeMode: themeMode ?? this.themeMode,
       seedColorValue: seedColorValue ?? this.seedColorValue,
     );

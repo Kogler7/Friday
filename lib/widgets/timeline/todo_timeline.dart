@@ -128,7 +128,7 @@ class _TodoTimelineState extends State<TodoTimeline>
     return (start, start.add(const Duration(days: 1)));
   }
 
-  /// 某天的全天型事件（reminderAt 或 dueDate 落在该天）
+  /// 某天的全天型日程（reminderAt 或 dueDate 落在该天）
   List<TodoItem> _fullDayItemsForDay(DateTime day) {
     return widget.items.where((item) {
       return _isSameDay(item.reminderAt, day) || _isSameDay(item.dueDate, day);
@@ -665,7 +665,7 @@ class _TodoTimelineState extends State<TodoTimeline>
     );
   }
 
-  /// 周天视图：每天一行，全天事件横向 Wrap
+  /// 周天视图：每天一行，全天日程横向 Wrap
   Widget _buildWeekDayContent(
     BuildContext context,
     ThemeData theme,
@@ -802,7 +802,7 @@ class _TodoTimelineState extends State<TodoTimeline>
     );
   }
 
-  /// 月天视图：按月份日历网格，全天事件纵向排列
+  /// 月天视图：按月份日历网格，全天日程纵向排列
   Widget _buildMonthDayContent(
     BuildContext context,
     ThemeData theme,

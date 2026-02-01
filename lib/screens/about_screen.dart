@@ -81,7 +81,7 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 32),
               Text(
-                '记录想法、管理事件、统计状态，让时间更有条理。',
+                '记录想法、管理日程、统计状态，让时间更有条理。',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurface,
                 ),

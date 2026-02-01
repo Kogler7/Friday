@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/activity/activity_state.dart';
 import '../models/settings/settings_preferences.dart';
 
 const String _keySettings = 'planplus_settings';
@@ -56,7 +55,7 @@ class SettingsService {
       'quietStartMinute': p.quietPeriodStart.minute,
       'quietEndHour': p.quietPeriodEnd.hour,
       'quietEndMinute': p.quietPeriodEnd.minute,
-      'quietDefaultState': p.quietPeriodDefaultState.value,
+      'quietDefaultPresetId': p.quietPeriodDefaultPresetId,
       'themeMode': p.themeMode.index,
       'seedColorValue': p.seedColorValue,
     };
@@ -67,6 +66,7 @@ class SettingsService {
     final themeMode = themeIndex != null && themeIndex >= 0 && themeIndex < ThemeMode.values.length
         ? ThemeMode.values[themeIndex]
         : ThemeMode.system;
+    final quietPresetId = map['quietDefaultPresetId'] as String?;
     return SettingsPreferences(
       statUnitMinutes: (map['statUnitMinutes'] as num?)?.toInt() ?? 20,
       reminderIntervalMinutes:
@@ -79,9 +79,7 @@ class SettingsService {
         hour: (map['quietEndHour'] as num?)?.toInt() ?? 10,
         minute: (map['quietEndMinute'] as num?)?.toInt() ?? 0,
       ),
-      quietPeriodDefaultState: ActivityStateExtension.fromValue(
-        map['quietDefaultState'] as String? ?? 'resting',
-      ),
+      quietPeriodDefaultPresetId: quietPresetId,
       themeMode: themeMode,
       seedColorValue: (map['seedColorValue'] as num?)?.toInt() ?? 0xFF673AB7,
     );

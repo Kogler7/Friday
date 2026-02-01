@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/status/status_record_data.dart';
 import 'notification_service.dart';
+import 'scheduled_dnd_storage.dart';
 import 'settings_service.dart';
+import 'status_preset_storage.dart';
 import 'storage_service.dart';
 
 /// 按设置间隔检查：若上一间隔尚未记录则弹窗或静默时段内自动填休息。
@@ -58,12 +61,26 @@ class HourlyPromptService {
     final length = Duration(minutes: intervalMin);
     if (StorageService.hasRecordForInterval(intervalStartToRecord, length)) return;
     if (_dialogShowing) return;
-    if (SettingsService.isInitialized &&
-        SettingsService.current.isSlotInQuietPeriod(intervalStartToRecord)) {
+    final dnd = ScheduledDndStorage.getActiveFor(intervalStartToRecord);
+    if (dnd != null) {
+      final preset = StatusPresetStorage.getById(dnd.presetId);
+      final data = preset?.data ?? const StatusRecordData(tagIds: ['睡眠']);
       StorageService.saveRecordsForInterval(
         intervalStartToRecord,
         length,
-        SettingsService.current.quietPeriodDefaultState,
+        data,
+      );
+      return;
+    }
+    if (SettingsService.isInitialized &&
+        SettingsService.current.isSlotInQuietPeriod(intervalStartToRecord)) {
+      final presetId = SettingsService.current.quietPeriodDefaultPresetId ?? 'builtin_resting';
+      final preset = StatusPresetStorage.getById(presetId);
+      final data = preset?.data ?? const StatusRecordData(tagIds: ['休息']);
+      StorageService.saveRecordsForInterval(
+        intervalStartToRecord,
+        length,
+        data,
       );
       return;
     }
@@ -87,12 +104,26 @@ class HourlyPromptService {
     if (StorageService.getRecordForHour(slotToRecord) != null) return;
     if (_dialogShowing) return;
     if (_lastShownSlot != null && _lastShownSlot == slotToRecord) return;
-    if (SettingsService.isInitialized &&
-        SettingsService.current.isSlotInQuietPeriod(slotToRecord)) {
+    final dnd = ScheduledDndStorage.getActiveFor(slotToRecord);
+    if (dnd != null) {
+      final preset = StatusPresetStorage.getById(dnd.presetId);
+      final data = preset?.data ?? const StatusRecordData(tagIds: ['睡眠']);
       StorageService.saveRecordsForInterval(
         slotToRecord,
         const Duration(minutes: 2),
-        SettingsService.current.quietPeriodDefaultState,
+        data,
+      );
+      return;
+    }
+    if (SettingsService.isInitialized &&
+        SettingsService.current.isSlotInQuietPeriod(slotToRecord)) {
+      final presetId = SettingsService.current.quietPeriodDefaultPresetId ?? 'builtin_resting';
+      final preset = StatusPresetStorage.getById(presetId);
+      final data = preset?.data ?? const StatusRecordData(tagIds: ['休息']);
+      StorageService.saveRecordsForInterval(
+        slotToRecord,
+        const Duration(minutes: 2),
+        data,
       );
       return;
     }

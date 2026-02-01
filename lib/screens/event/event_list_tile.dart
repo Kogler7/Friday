@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../models/event/todo_item.dart';
 
-/// 事件列表项：标题、副信息（DDL/提醒/日程）、完成勾选
+/// 日程列表项：标题、副信息（DDL/提醒/日程）、完成勾选
 class EventListTile extends StatelessWidget {
   final TodoItem item;
   final ThemeData theme;

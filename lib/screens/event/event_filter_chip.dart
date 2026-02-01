@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 事件页筛选 Chip：显示标签与数量
+/// 日程页筛选 Chip：显示标签与数量
 class EventFilterChip extends StatelessWidget {
   final String label;
   final bool selected;

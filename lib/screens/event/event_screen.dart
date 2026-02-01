@@ -17,8 +17,8 @@ enum _EventFilter {
   completed,
 }
 
-/// 事件页：用于记录事件（原 TodoScreen）
-/// 左滑切换至事件列表，时间轴页右滑展开日期标签
+/// 日程页：用于记录日程（原 TodoScreen）
+/// 左滑切换至日程列表，时间轴页右滑展开日期标签
 class EventScreen extends StatefulWidget {
   final void Function(List<Widget> actions)? onAppBarActionsReady;
 
@@ -207,7 +207,7 @@ class _EventScreenState extends State<EventScreen> {
               ? Center(
                   child: Text(
                     _filter == _EventFilter.all
-                        ? '暂无事件，点击右下角 + 添加'
+                        ? '暂无日程，点击右下角 + 添加'
                         : _filter == _EventFilter.active
                             ? '没有未完成项'
                             : '没有已完成项',
@@ -305,7 +305,7 @@ class _EventScreenState extends State<EventScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openEditSheet(),
-        tooltip: '添加事件',
+        tooltip: '添加日程',
         shape: const CircleBorder(),
         child: const Icon(Icons.add),
       ),
