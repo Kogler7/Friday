@@ -81,7 +81,6 @@ class IdeaSessionStorage {
     return _prefs.getString(_keyCurrentId);
   }
 
-  /// 若当前会话为隐藏状态，则切换到第一个未隐藏会话，无则清空当前会话（退出开发者模式时调用）
   static Future<void> ensureCurrentSessionVisible() async {
     final id = getCurrentSessionId();
     if (id == null) return;

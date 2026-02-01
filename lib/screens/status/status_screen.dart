@@ -4,7 +4,6 @@ import '../../models/activity/hourly_record.dart';
 import '../../models/status/status_record_data.dart';
 import '../../services/dev_sample_data.dart';
 import '../../services/status_preset_storage.dart';
-import '../../services/settings_service.dart';
 import '../../services/status_data_source.dart';
 import '../../services/storage_service.dart';
 import 'batch_set_sheet.dart';
@@ -65,34 +64,40 @@ class _StatusScreenState extends State<StatusScreen> {
           );
         },
       ),
-      PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        onSelected: (v) async {
-          if (v == 'batch') showBatchSetSheet(context, _load);
-          else if (v == 'dnd') showScheduledDndSheet(context);
-          else if (v == 'fill_sample') {
-            await DevSampleData.insertSampleData();
-            _load();
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已填充示例')));
-          } else if (v == 'clear_range' || v == 'clear_all') await _clearData(v);
-        },
-        itemBuilder: (_) {
-          final items = <PopupMenuEntry<String>>[
-            const PopupMenuItem(value: 'batch', child: Text('批量设置')),
-            const PopupMenuItem(value: 'dnd', child: Text('预定免打扰')),
-          ];
-          if (kDebugMode) {
-            items.addAll([
-              const PopupMenuDivider(),
+      IconButton(
+        icon: const Icon(Icons.edit_calendar),
+        tooltip: '批量设置',
+        onPressed: () => showBatchSetSheet(context, _load),
+      ),
+      if (kDebugMode)
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (v) async {
+            if (v == 'fill_sample') {
+              await DevSampleData.insertSampleData();
+              _load();
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已填充示例')));
+            } else if (v == 'clear_range' || v == 'clear_all') {
+              await _clearData(v);
+            } else if (v == 'data_switch') {
+              StatusDataSource.useTestData.value = !StatusDataSource.useTestData.value;
+              if (StatusDataSource.isTestData) {
+                await StatusPresetStorage.ensureBuiltInPresets();
+              }
+              _load();
+            }
+          },
+          itemBuilder: (_) {
+            final items = <PopupMenuEntry<String>>[
               if (StatusDataSource.isTestData)
                 const PopupMenuItem(value: 'fill_sample', child: Text('填充示例数据')),
               const PopupMenuItem(value: 'clear_range', child: Text('清空时间范围')),
               const PopupMenuItem(value: 'clear_all', child: Text('全部清空')),
-            ]);
-          }
-          return items;
-        },
-      ),
+              const PopupMenuItem(value: 'data_switch', child: Text('切换数据源')),
+            ];
+            return items;
+          },
+        ),
     ];
   }
 
@@ -222,58 +227,11 @@ class _StatusScreenState extends State<StatusScreen> {
           ],
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (kDebugMode) _buildDataSwitchButton(),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            onPressed: () => _showAddRecordSheet(context),
-            tooltip: '添加记录',
-            child: const Icon(Icons.add),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDataSwitchButton() {
-    final isTest = StatusDataSource.isTestData;
-    return FloatingActionButton.small(
-      onPressed: () async {
-        StatusDataSource.useTestData.value = !StatusDataSource.useTestData.value;
-        if (StatusDataSource.isTestData) {
-          await StatusPresetStorage.ensureBuiltInPresets();
-        }
-        _load();
-      },
-      tooltip: isTest ? '切换回用户数据' : '切换到测试数据',
-      heroTag: 'data_switch',
-      child: Icon(isTest ? Icons.swap_horiz : Icons.science_outlined),
-    );
-  }
-
-  void _showAddRecordSheet(BuildContext context) {
-    final unitMin = SettingsService.isInitialized ? SettingsService.current.statUnitMinutes : 20;
-    final now = DateTime.now();
-    final totalMin = now.hour * 60 + now.minute;
-    final rounded = (totalMin ~/ unitMin) * unitMin;
-    final slot = DateTime(now.year, now.month, now.day, rounded ~/ 60, rounded % 60, 0, 0);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => StatusRecordFormSheet(
-        initialData: const StatusRecordData(),
-        onSubmit: (data) {
-          Navigator.of(ctx).pop();
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            await StorageService.saveRecord(HourlyRecord(hourStart: slot, data: data));
-            if (mounted) _load();
-          });
-        },
-        onCancel: () => Navigator.of(ctx).pop(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => showScheduledDndSheet(context),
+        tooltip: '预定免打扰',
+        shape: const CircleBorder(),
+        child: const Icon(Icons.do_not_disturb_on_total_silence),
       ),
     );
   }

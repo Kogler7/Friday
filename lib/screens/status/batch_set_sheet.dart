@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../models/status/status_preset.dart';
 import '../../services/status_preset_storage.dart';
 import '../../services/storage_service.dart';
 
@@ -10,7 +9,7 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
   DateTime dateEnd = DateTime.now();
   TimeOfDay timeStart = const TimeOfDay(hour: 0, minute: 0);
   TimeOfDay timeEnd = const TimeOfDay(hour: 23, minute: 59);
-  StatusPreset? selectedPreset = StatusPresetStorage.getAll().firstOrNull;
+  String? selectedPresetId = StatusPresetStorage.getAll().firstOrNull?.id;
 
   showModalBottomSheet<void>(
     context: context,
@@ -20,6 +19,15 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
       return StatefulBuilder(
         builder: (ctx, setState) {
           final presets = StatusPresetStorage.getAll();
+          // 若当前选中 id 不在列表中（如预设被隐藏），重置为第一个
+          if (presets.isNotEmpty &&
+              (selectedPresetId == null ||
+                  !presets.any((p) => p.id == selectedPresetId))) {
+            selectedPresetId = presets.first.id;
+          }
+          final selectedPreset =
+              presets.where((p) => p.id == selectedPresetId).firstOrNull ??
+                  presets.firstOrNull;
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -110,11 +118,11 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
                     style: Theme.of(ctx).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<StatusPreset>(
-                    value: selectedPreset,
+                  DropdownButtonFormField<String>(
+                    value: selectedPresetId,
                     items: presets
                         .map((p) => DropdownMenuItem(
-                              value: p,
+                              value: p.id,
                               child: Row(
                                 children: [
                                   Icon(p.icon, size: 20, color: p.color),
@@ -124,14 +132,15 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
                               ),
                             ))
                         .toList(),
-                    onChanged: (v) => setState(() => selectedPreset = v),
+                    onChanged: (v) => setState(() => selectedPresetId = v),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed: selectedPreset == null || dateEnd.isBefore(dateStart)
+                    onPressed: selectedPreset == null ||
+                            dateEnd.isBefore(dateStart)
                         ? null
                           : () {
-                            final preset = selectedPreset!;
+                            final preset = selectedPreset;
                             final ds = dateStart;
                             final de = dateEnd;
                             final ts = timeStart;

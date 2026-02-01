@@ -262,7 +262,6 @@ class StatusPresetStorage {
     await _setHiddenIds(ids);
   }
 
-  /// 恢复默认：清除所有内置预设的隐藏状态
   static Future<void> restoreBuiltInVisibility() async {
     final ids = _getHiddenIds();
     for (final p in _builtInPresets) {

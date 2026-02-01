@@ -15,6 +15,21 @@ class ScheduledDnd {
     this.recurringDaily = false,
   });
 
+  ScheduledDnd copyWith({
+    String? id,
+    DateTime? start,
+    DateTime? end,
+    String? presetId,
+    bool? recurringDaily,
+  }) =>
+      ScheduledDnd(
+        id: id ?? this.id,
+        start: start ?? this.start,
+        end: end ?? this.end,
+        presetId: presetId ?? this.presetId,
+        recurringDaily: recurringDaily ?? this.recurringDaily,
+      );
+
   /// 某时刻是否在此免打扰范围内
   bool contains(DateTime time) {
     if (recurringDaily) {

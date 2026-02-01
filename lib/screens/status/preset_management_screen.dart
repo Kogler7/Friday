@@ -456,8 +456,27 @@ class _PresetList extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.restore),
                 title: const Text('恢复默认'),
-                subtitle: const Text('重置内置预设可见性'),
                 onTap: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('恢复预设默认'),
+                      content: const Text(
+                        '将清除所有自定义预设，并恢复内置预设。\n\n确定继续？',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('恢复'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
                   await StatusPresetStorage.restoreBuiltInVisibility();
                   onChanged();
                   if (context.mounted) {
@@ -603,6 +622,26 @@ class _TagList extends StatelessWidget {
                 leading: const Icon(Icons.restore),
                 title: const Text('恢复默认'),
                 onTap: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('恢复标签默认'),
+                      content: const Text(
+                        '将清除所有自定义活动标签，并恢复内置标签。\n\n确定继续？',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('恢复'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
                   await ActivityTagStorage.restoreDefaults();
                   onChanged();
                   if (context.mounted) {
