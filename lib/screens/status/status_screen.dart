@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../constants/app_config.dart';
-import '../models/activity/activity_state.dart';
-import '../models/activity/hourly_record.dart';
-import '../services/dev_sample_data.dart';
-import '../services/settings_service.dart';
-import '../services/storage_service.dart';
-import '../widgets/daily_chart.dart';
+import '../../constants/app_config.dart';
+import '../../models/activity/hourly_record.dart';
+import '../../services/dev_sample_data.dart';
+import '../../services/storage_service.dart';
+import '../../widgets/daily_chart.dart';
+import 'status_record_tile.dart';
 
 /// 状态页：按日查看工作/休息/娱乐分布与小时明细
 class StatusScreen extends StatefulWidget {
@@ -118,27 +117,7 @@ class _StatusScreenState extends State<StatusScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                ..._records.map((r) {
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        r.state == ActivityState.working
-                            ? Icons.work
-                            : r.state == ActivityState.resting
-                                ? Icons.bedtime
-                                : Icons.games,
-                        color: r.state == ActivityState.working
-                            ? Colors.blue
-                            : r.state == ActivityState.resting
-                                ? Colors.orange
-                                : Colors.green,
-                      ),
-                      title: Text(r.displayTimeRange(unitMinutes: SettingsService.current.statUnitMinutes)),
-                      subtitle: Text(r.state.displayName),
-                    ),
-                  );
-                }),
+                ..._records.map((r) => StatusRecordTile(key: ValueKey(r.hourStart), record: r)),
               ],
             ],
           ),

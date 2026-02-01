@@ -8,12 +8,12 @@ import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/hourly_prompt_dialog.dart';
 import 'about_screen.dart';
-import 'event_screen.dart';
-import 'idea_screen.dart';
+import 'event/event_screen.dart';
+import 'idea/idea_screen.dart';
 import 'settings_screen.dart';
-import 'smart_screen.dart';
-import 'status_screen.dart';
-import 'stats_screen.dart';
+import 'smart/smart_screen.dart';
+import 'status/status_screen.dart';
+import 'stats/stats_screen.dart';
 
 /// 底部导航：事件、状态、智能(中)、想法、统计；侧边栏 Drawer：头像、设置、关于
 class MainShell extends StatefulWidget {

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
-import '../common/slidable_action_tile.dart';
-import '../constants/app_config.dart';
-import '../models/event/todo_item.dart';
-import '../services/dev_todo_sample.dart';
-import '../services/todo_storage_service.dart';
-import '../widgets/todo_edit_sheet.dart';
-import '../widgets/timeline/timeline.dart';
+import '../../common/slidable_action_tile.dart';
+import '../../constants/app_config.dart';
+import '../../models/event/todo_item.dart';
+import '../../services/dev_todo_sample.dart';
+import '../../services/todo_storage_service.dart';
+import '../../widgets/todo_edit_sheet.dart';
+import '../../widgets/timeline/timeline.dart';
+import 'event_filter_chip.dart';
+import 'event_list_tile.dart';
 
 /// 筛选类型
 enum _EventFilter {
@@ -177,21 +178,21 @@ class _EventScreenState extends State<EventScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              _FilterChip(
+              EventFilterChip(
                 label: '全部',
                 selected: _filter == _EventFilter.all,
                 count: _items.length,
                 onTap: () => setState(() => _filter = _EventFilter.all),
               ),
               const SizedBox(width: 8),
-              _FilterChip(
+              EventFilterChip(
                 label: '未完成',
                 selected: _filter == _EventFilter.active,
                 count: _items.where((e) => !e.completed).length,
                 onTap: () => setState(() => _filter = _EventFilter.active),
               ),
               const SizedBox(width: 8),
-              _FilterChip(
+              EventFilterChip(
                 label: '已完成',
                 selected: _filter == _EventFilter.completed,
                 count: _items.where((e) => e.completed).length,
@@ -233,7 +234,7 @@ class _EventScreenState extends State<EventScreen> {
                         backgroundColor: Colors.blue,
                         onTrigger: () => _toggle(item),
                       ),
-                      child: _EventListTile(
+                      child: EventListTile(
                         item: item,
                         theme: theme,
                         onToggle: () => _toggle(item),
@@ -308,91 +309,6 @@ class _EventScreenState extends State<EventScreen> {
         shape: const CircleBorder(),
         child: const Icon(Icons.add),
       ),
-    );
-  }
-}
-
-class _EventListTile extends StatelessWidget {
-  final TodoItem item;
-  final ThemeData theme;
-  final VoidCallback onToggle;
-  final VoidCallback onTap;
-
-  const _EventListTile({
-    required this.item,
-    required this.theme,
-    required this.onToggle,
-    required this.onTap,
-  });
-
-  static final _dateTimeFmt = DateFormat('MM-dd HH:mm');
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = <String>[];
-    if (item.dueDate != null) {
-      lines.add('DDL ${_dateTimeFmt.format(item.dueDate!)}');
-    }
-    if (item.reminderAt != null) {
-      lines.add('提醒 ${_dateTimeFmt.format(item.reminderAt!)}');
-    }
-    if (item.scheduledStart != null || item.scheduledEnd != null) {
-      final start = item.scheduledStart != null ? _dateTimeFmt.format(item.scheduledStart!) : '?';
-      final end = item.scheduledEnd != null ? _dateTimeFmt.format(item.scheduledEnd!) : '?';
-      lines.add('日程 $start — $end');
-    }
-    final subtitle = lines.isEmpty ? null : lines.join(' · ');
-
-    return ListTile(
-      leading: Checkbox(
-        value: item.completed,
-        onChanged: (_) => onToggle(),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-      title: Text(
-        item.title,
-        style: TextStyle(
-          decoration: item.completed ? TextDecoration.lineThrough : null,
-          color: item.completed ? theme.colorScheme.onSurfaceVariant : null,
-        ),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
-      onTap: onTap,
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final int count;
-  final VoidCallback onTap;
-
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.count,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text('$label${count > 0 ? ' ($count)' : ''}'),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      showCheckmark: false,
     );
   }
 }
