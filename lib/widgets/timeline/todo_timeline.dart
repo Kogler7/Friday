@@ -10,12 +10,26 @@ import 'constants.dart';
 import 'models.dart';
 import 'painters.dart';
 
+/// 时间轴控制器：用于从外部调用还原等操作
+class TodoTimelineController extends ChangeNotifier {
+  void Function()? _reset;
+
+  void _attach(void Function() reset) {
+    _reset = reset;
+  }
+
+  void reset() => _reset?.call();
+}
+
 /// 可缩放、可滑动、多日、自动归位、一键还原的时间轴
 class TodoTimeline extends StatefulWidget {
   final List<TodoItem> items;
   final DateTime today;
   final VoidCallback? onRefresh;
   final void Function(TodoItem)? onItemTap;
+  final TodoTimelineController? controller;
+  /// 左侧日期标签是否展开为年月日全写
+  final bool labelsExpanded;
 
   const TodoTimeline({
     super.key,
@@ -23,6 +37,8 @@ class TodoTimeline extends StatefulWidget {
     required this.today,
     this.onRefresh,
     this.onItemTap,
+    this.controller,
+    this.labelsExpanded = false,
   });
 
   @override
@@ -112,6 +128,13 @@ class _TodoTimelineState extends State<TodoTimeline>
     return (start, start.add(const Duration(days: 1)));
   }
 
+  /// 某天的全天型事件（reminderAt 或 dueDate 落在该天）
+  List<TodoItem> _fullDayItemsForDay(DateTime day) {
+    return widget.items.where((item) {
+      return _isSameDay(item.reminderAt, day) || _isSameDay(item.dueDate, day);
+    }).toList();
+  }
+
   List<TimelineSegment> _segmentsForDay(DateTime day) {
     final segments = <TimelineSegment>[];
     final (dayStart, dayEnd) = _dayRange(day);
@@ -152,13 +175,39 @@ class _TodoTimelineState extends State<TodoTimeline>
     }
     segments.sort((a, b) {
       if (a.isFullDay != b.isFullDay) return a.isFullDay ? -1 : 1;
-      return a.startMinute.compareTo(b.startMinute);
+      final startCmp = a.startMinute.compareTo(b.startMinute);
+      if (startCmp != 0) return startCmp;
+      return (b.endMinute - b.startMinute).compareTo(a.endMinute - a.startMinute);
     });
     return segments;
   }
 
+  /// 仅当开始时间相同时才分道：同一起始分钟内的段均分宽度，返回 (segment, laneIndex, sameStartCount)
+  List<(TimelineSegment, int, int)> _segmentsWithLanes(List<TimelineSegment> segments) {
+    if (segments.isEmpty) return [];
+    final groups = <int, List<TimelineSegment>>{};
+    for (final s in segments) {
+      groups.putIfAbsent(s.startMinute, () => []).add(s);
+    }
+    final result = <(TimelineSegment, int, int)>[];
+    for (final startMin in groups.keys.toList()..sort()) {
+      final list = groups[startMin]!;
+      final sameStartCount = list.length;
+      for (int i = 0; i < list.length; i++) {
+        result.add((list[i], i, sameStartCount));
+      }
+    }
+    return result;
+  }
+
   double _offsetOfNow() {
     final now = DateTime.now();
+    if (isWeekDayMode(_granularityIndex)) {
+      return _todayIndex * kWeekDayRowHeight - 1;
+    }
+    if (isMonthDayMode(_granularityIndex)) {
+      return _offsetOfNowMonthMode();
+    }
     final todayStart = DateTime(widget.today.year, widget.today.month, widget.today.day);
     if (now.isBefore(todayStart) || !now.isBefore(todayStart.add(const Duration(days: 1)))) {
       return _todayIndex * _displayDayHeight + _displayDayHeight * 0.5;
@@ -166,6 +215,23 @@ class _TodoTimelineState extends State<TodoTimeline>
     final blockStart = _todayIndex * _displayDayHeight;
     final nowMinutes = _toMinutesOfDay(now);
     return blockStart + (nowMinutes / 60) * _displayPixelsPerHour;
+  }
+
+  double _offsetOfNowMonthMode() {
+    const cellHeight = 88.0;
+    const headerHeight = 32.0;
+    final startDate = widget.today.add(const Duration(days: -kDaysBeforeToday));
+    var offset = 0.0;
+    var d = DateTime(startDate.year, startDate.month, 1);
+    final targetMonth = DateTime(widget.today.year, widget.today.month, 1);
+    while (d.isBefore(targetMonth)) {
+      final daysInMonth = DateUtils.getDaysInMonth(d.year, d.month);
+      final firstWeekday = (d.weekday - 1) % 7;
+      final weeks = ((firstWeekday + daysInMonth) / 7).ceil().clamp(4, 6);
+      offset += headerHeight + weeks * cellHeight;
+      d = DateTime(d.year, d.month + 1, 1);
+    }
+    return (offset - 80).clamp(0.0, double.infinity);
   }
 
   static double _pointerDistance(Map<int, Offset> positions) {
@@ -207,7 +273,9 @@ class _TodoTimelineState extends State<TodoTimeline>
     if (_pinchAnchorViewportY == null ||
         _pinchAnchorDayIndex == null ||
         _pinchAnchorMinuteOfDay == null ||
-        !_scrollController.hasClients) return;
+        !_scrollController.hasClients) {
+      return;
+    }
     final anchorV = _pinchAnchorViewportY!;
     final anchorDay = _pinchAnchorDayIndex!;
     final anchorMin = _pinchAnchorMinuteOfDay!;
@@ -229,7 +297,7 @@ class _TodoTimelineState extends State<TodoTimeline>
         final ratio = d / _pinchStartDistance!;
         final step = ratio > 1.2 ? -1 : (ratio < 0.8 ? 1 : 0);
         if (step != 0) {
-          final next = (_granularityAtPinchStart + step).clamp(0, kDiscreteTickMinutes.length - 1);
+          final next = (_granularityAtPinchStart + step).clamp(0, kGranularityCount - 1);
           if (next != _granularityIndex && _animatingToGranularityIndex == null) {
             _pinchStepApplied = true;
             _pendingGranularityIndex = next;
@@ -241,18 +309,32 @@ class _TodoTimelineState extends State<TodoTimeline>
                 _pendingGranularityIndex = null;
                 _scaleUpdateScheduled = false;
                 if (p != null && p != _granularityIndex) {
-                  final anchorV = _pinchAnchorViewportY;
-                  final anchorDay = _pinchAnchorDayIndex;
-                  final anchorMin = _pinchAnchorMinuteOfDay;
-                  if (anchorV != null && anchorDay != null && anchorMin != null &&
-                      _scrollController.hasClients) {
-                    _animatingToGranularityIndex = p;
-                    _granularityAnimationController.forward(from: 0);
-                  } else {
+                  final isMonthTarget = isMonthDayMode(p);
+                  final isMonthCurrent = isMonthDayMode(_granularityIndex);
+                  if (isMonthTarget || isMonthCurrent) {
                     setState(() {
                       _granularityIndex = p;
                       _granularityAtPinchStart = p;
+                      _animatingToGranularityIndex = null;
+                      _granularityAnimationT = 0;
                     });
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && _scrollController.hasClients) _jumpToNow();
+                    });
+                  } else {
+                    final anchorV = _pinchAnchorViewportY;
+                    final anchorDay = _pinchAnchorDayIndex;
+                    final anchorMin = _pinchAnchorMinuteOfDay;
+                    if (anchorV != null && anchorDay != null && anchorMin != null &&
+                        _scrollController.hasClients) {
+                      _animatingToGranularityIndex = p;
+                      _granularityAnimationController.forward(from: 0);
+                    } else {
+                      setState(() {
+                        _granularityIndex = p;
+                        _granularityAtPinchStart = p;
+                      });
+                    }
                   }
                 }
               });
@@ -278,6 +360,7 @@ class _TodoTimelineState extends State<TodoTimeline>
 
   void _animateToNow() {
     if (!mounted || !_scrollController.hasClients) return;
+    _recenterTimer?.cancel();
     final viewportHeight = _scrollController.position.viewportDimension;
     final targetOffset = (_offsetOfNow() - viewportHeight / 2).clamp(
       _scrollController.position.minScrollExtent,
@@ -288,6 +371,18 @@ class _TodoTimelineState extends State<TodoTimeline>
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOut,
     );
+  }
+
+  /// 切换粒度后立即跳到当前时刻，不动画（避免从旧偏移长距离滚动）
+  void _jumpToNow() {
+    if (!mounted || !_scrollController.hasClients) return;
+    _recenterTimer?.cancel();
+    final viewportHeight = _scrollController.position.viewportDimension;
+    final targetOffset = (_offsetOfNow() - viewportHeight / 2).clamp(
+      _scrollController.position.minScrollExtent,
+      _scrollController.position.maxScrollExtent,
+    );
+    _scrollController.jumpTo(targetOffset);
   }
 
   void _scheduleRecenter() {
@@ -302,13 +397,14 @@ class _TodoTimelineState extends State<TodoTimeline>
     _animatingToGranularityIndex = null;
     _granularityAnimationT = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) _animateToNow();
+      if (mounted && _scrollController.hasClients) _jumpToNow();
     });
   }
 
   @override
   void initState() {
     super.initState();
+    widget.controller?._attach(_resetZoomAndRecenter);
     _granularityAnimationController = AnimationController(
       vsync: this,
       duration: kGranularityTransitionDuration,
@@ -343,7 +439,17 @@ class _TodoTimelineState extends State<TodoTimeline>
   }
 
   @override
+  void didUpdateWidget(covariant TodoTimeline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._attach(() {});
+      widget.controller?._attach(_resetZoomAndRecenter);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.controller?._attach(() {});
     _recenterTimer?.cancel();
     _granularityAnimationController.dispose();
     _scrollController.dispose();
@@ -351,6 +457,40 @@ class _TodoTimelineState extends State<TodoTimeline>
   }
 
   bool _initialScrollDone = false;
+
+  Widget _buildGranularityDropdown(BuildContext context, ThemeData theme) {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<int>(
+        value: _granularityIndex.clamp(0, kGranularityCount - 1),
+        isDense: true,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        items: List.generate(
+          kGranularityCount,
+          (i) => DropdownMenuItem<int>(
+            value: i,
+            child: Text(granularityLabelForIndex(i)),
+          ),
+        ),
+        onChanged: (int? value) {
+          if (value == null || value == _granularityIndex) return;
+          setState(() {
+            _granularityIndex = value;
+            _granularityAtPinchStart = value;
+            _animatingToGranularityIndex = null;
+            _granularityAnimationT = 0;
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _scrollController.hasClients) {
+              _jumpToNow();
+            }
+          });
+        },
+      ),
+    );
+  }
 
   void _ensureInitialScroll() {
     if (!mounted || _initialScrollDone || !_scrollController.hasClients) return;
@@ -361,6 +501,17 @@ class _TodoTimelineState extends State<TodoTimeline>
       _scrollController.position.maxScrollExtent,
     );
     _scrollController.jumpTo(target);
+  }
+
+  /// 日期格式化：labelsExpanded 时全写，否则当年用"M月d日"，非当年用"yyyy年M月d日"
+  String _formatDayLabel(DateTime day, DateTime now) {
+    if (widget.labelsExpanded) {
+      return DateFormat('yyyy年M月d日').format(day);
+    }
+    if (day.year == now.year) {
+      return DateFormat('M月d日').format(day);
+    }
+    return DateFormat('yyyy年M月d日').format(day);
   }
 
   @override
@@ -392,25 +543,15 @@ class _TodoTimelineState extends State<TodoTimeline>
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const Spacer(),
                   Text(
-                    '粒度 ${granularityLabel(tickIntervalMinutesFor(_granularityIndex))}',
+                    '粒度',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const Spacer(),
-                  if (widget.onRefresh != null)
-                    IconButton(
-                      icon: const Icon(Icons.refresh, size: 20),
-                      onPressed: widget.onRefresh,
-                      tooltip: '刷新',
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.restore, size: 20),
-                    onPressed: _resetZoomAndRecenter,
-                    tooltip: '还原：缩放与位置',
-                  ),
+                  const SizedBox(width: 4),
+                  _buildGranularityDropdown(context, theme),
                 ],
               ),
             ),
@@ -455,6 +596,14 @@ class _TodoTimelineState extends State<TodoTimeline>
   ) {
     final isPinching = _pointerPositions.length >= 2;
     final animationT = _animatingToGranularityIndex != null ? _granularityAnimationT : null;
+
+    if (isWeekDayMode(_granularityIndex)) {
+      return _buildWeekDayContent(context, theme, dateFmt, now, isPinching, animationT);
+    }
+    if (isMonthDayMode(_granularityIndex)) {
+      return _buildMonthDayContent(context, theme, dateFmt, now, isPinching);
+    }
+
     return Listener(
       key: _scrollContentKey,
       onPointerDown: _onPointerDown,
@@ -516,11 +665,337 @@ class _TodoTimelineState extends State<TodoTimeline>
     );
   }
 
-  /// 时间标签列：标签中心对准右侧刻度线（负 Y 偏移使中心对齐而非顶部对齐）
+  /// 周天视图：每天一行，全天事件横向 Wrap
+  Widget _buildWeekDayContent(
+    BuildContext context,
+    ThemeData theme,
+    DateFormat dateFmt,
+    DateTime now,
+    bool isPinching,
+    double? animationT,
+  ) {
+    return Listener(
+      key: _scrollContentKey,
+      onPointerDown: _onPointerDown,
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerUpOrCancel,
+      onPointerCancel: _onPointerUpOrCancel,
+      child: Stack(
+        children: [
+          AbsorbPointer(
+            absorbing: isPinching,
+            child: ListView.builder(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              itemCount: _daysCount,
+              itemExtent: kWeekDayRowHeight,
+              itemBuilder: (context, dayIndex) => RepaintBoundary(
+                child: _buildWeekDayRow(context, dayIndex, theme, dateFmt, now),
+              ),
+            ),
+          ),
+          if (_isSameDay(now, widget.today))
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 8,
+              child: Center(
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerHigh.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    onTap: _animateToNow,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        '今天',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekDayRow(
+    BuildContext context,
+    int dayIndex,
+    ThemeData theme,
+    DateFormat dateFmt,
+    DateTime now,
+  ) {
+    final day = widget.today.add(Duration(days: dayIndex - _todayIndex));
+    final isToday = _isSameDay(now, day);
+    final dayLabel = dayIndex == _todayIndex ? '今天' : _formatDayLabel(day, now);
+    final items = _fullDayItemsForDay(day);
+    return SizedBox(
+      height: kWeekDayRowHeight,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: widget.labelsExpanded ? 100 : 76,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6, top: 6),
+                child: Text(
+                  dayLabel,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: items.map((item) {
+                  final color = _colorForItem(item);
+                  return Material(
+                    color: color.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(6),
+                    child: InkWell(
+                      onTap: () => widget.onItemTap?.call(item),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                            shadows: [
+                              Shadow(offset: Offset(0, 0.5), blurRadius: 1, color: Colors.black26),
+                            ],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 月天视图：按月份日历网格，全天事件纵向排列
+  Widget _buildMonthDayContent(
+    BuildContext context,
+    ThemeData theme,
+    DateFormat dateFmt,
+    DateTime now,
+    bool isPinching,
+  ) {
+    final startDate = widget.today.add(const Duration(days: -kDaysBeforeToday));
+    final endDate = widget.today.add(const Duration(days: kDaysAfterToday));
+    final months = <DateTime>[];
+    var d = DateTime(startDate.year, startDate.month, 1);
+    while (d.isBefore(endDate) || d.isAtSameMomentAs(DateTime(endDate.year, endDate.month, 1))) {
+      months.add(d);
+      d = DateTime(d.year, d.month + 1, 1);
+    }
+    if (months.isEmpty) months.add(DateTime(now.year, now.month, 1));
+
+    const cellHeight = 88.0;
+    const headerHeight = 32.0;
+
+    return Listener(
+      key: _scrollContentKey,
+      onPointerDown: _onPointerDown,
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerUpOrCancel,
+      onPointerCancel: _onPointerUpOrCancel,
+      child: Stack(
+        children: [
+          AbsorbPointer(
+            absorbing: isPinching,
+            child: ListView.builder(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              itemCount: months.length,
+              itemBuilder: (context, index) {
+                final monthStart = months[index];
+                final daysInMonth = DateUtils.getDaysInMonth(monthStart.year, monthStart.month);
+                final firstWeekday = (monthStart.weekday - 1) % 7;
+                final weeks = ((firstWeekday + daysInMonth) / 7).ceil().clamp(4, 6);
+                final monthHeight = headerHeight + weeks * cellHeight;
+                return SizedBox(
+                  height: monthHeight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Text(
+                          '${monthStart.year}年${monthStart.month}月',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GridView.builder(
+                          physics: const NeverScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 7,
+                            mainAxisSpacing: 2,
+                            crossAxisSpacing: 2,
+                            mainAxisExtent: cellHeight - 2,
+                          ),
+                          itemCount: firstWeekday + daysInMonth,
+                          itemBuilder: (context, i) {
+                            if (i < firstWeekday) {
+                              return Container(color: Colors.transparent);
+                            }
+                            final dayOfMonth = i - firstWeekday + 1;
+                            final day = DateTime(monthStart.year, monthStart.month, dayOfMonth);
+                            final isToday = _isSameDay(now, day);
+                            final items = _fullDayItemsForDay(day);
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: isToday
+                                    ? theme.colorScheme.primaryContainer.withOpacity(0.4)
+                                    : theme.colorScheme.surfaceContainerLow.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(6),
+                                border: isToday
+                                    ? Border.all(color: theme.colorScheme.primary, width: 1.5)
+                                    : null,
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '$dayOfMonth',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: isToday
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurfaceVariant,
+                                      fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: items.map((item) {
+                                          final color = _colorForItem(item);
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 2),
+                                            child: Material(
+                                              color: color.withOpacity(0.35),
+                                              borderRadius: BorderRadius.circular(4),
+                                              child: InkWell(
+                                                onTap: () => widget.onItemTap?.call(item),
+                                                borderRadius: BorderRadius.circular(4),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 2,
+                                                  ),
+                                                  child: Text(
+                                                    item.title,
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.w500,
+                                                      shadows: [
+                                                        Shadow(
+                                                          offset: Offset(0, 0.5),
+                                                          blurRadius: 1,
+                                                          color: Colors.black26,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_isSameDay(now, widget.today))
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 8,
+              child: Center(
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerHigh.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    onTap: _animateToNow,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        '今天',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 时间标签列：labelsExpanded 时显示 "yy/mm/dd HH:mm"
   Widget _buildTimeLabels(
     int tickCount,
     double tickHeight,
-    ThemeData theme, {
+    ThemeData theme,
+    DateTime day, {
     double? animationT,
   }) {
     const maxLabels = 24;
@@ -532,6 +1007,9 @@ class _TodoTimelineState extends State<TodoTimeline>
       color: theme.colorScheme.onSurfaceVariant,
     );
     final textOpacity = _textOpacityForTransition(animationT);
+    final datePrefix = widget.labelsExpanded
+        ? '${(day.year % 100).toString().padLeft(2, '0')}/${day.month.toString().padLeft(2, '0')}/${day.day.toString().padLeft(2, '0')} '
+        : '';
     return SizedBox(
       height: _displayDayHeight,
       child: Stack(
@@ -540,7 +1018,6 @@ class _TodoTimelineState extends State<TodoTimeline>
           final i = j * step;
           final min = i * _tickIntervalMinutes;
           final h = min ~/ 60, m = min % 60;
-          // 刻度线在 j*step 处；标签中心对准该刻度，故 top = 刻度 y - 半高
           final tickY = j * step * tickHeight;
           final top = tickY - labelHeight / 2;
           return Positioned(
@@ -555,8 +1032,10 @@ class _TodoTimelineState extends State<TodoTimeline>
                 child: Opacity(
                   opacity: textOpacity,
                   child: Text(
-                    '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+                    '$datePrefix${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
                     style: textStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -578,7 +1057,7 @@ class _TodoTimelineState extends State<TodoTimeline>
   }) {
     final day = widget.today.add(Duration(days: dayIndex - _todayIndex));
     final isToday = _isSameDay(now, day);
-    final dayLabel = dayIndex == _todayIndex ? '今天' : dateFmt.format(day);
+    final dayLabel = dayIndex == _todayIndex ? '今天' : _formatDayLabel(day, now);
     final segments = _segmentsForDay(day);
     final tickHeight = _displayPixelsPerHour * (tickIntervalMinutesFor(_granularityIndex) / 60);
     final textOpacity = _textOpacityForTransition(animationT);
@@ -588,81 +1067,100 @@ class _TodoTimelineState extends State<TodoTimeline>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            width: 52,
-            child: _buildTimeLabels(tickCount, tickHeight, theme, animationT: animationT),
+            width: widget.labelsExpanded ? 115 : 52,
+            child: _buildTimeLabels(tickCount, tickHeight, theme, day, animationT: animationT),
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: TimelineGridPainter(
-                      tickHeight: tickHeight,
-                      tickCount: tickCount,
-                      lineColor: theme.colorScheme.outline.withOpacity(0.12),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  top: 4,
-                  child: Opacity(
-                    opacity: textOpacity,
-                    child: Text(
-                      dayLabel,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                        fontSize: 13,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final w = constraints.maxWidth;
+                final segmentsWithLanes = _segmentsWithLanes(segments);
+                const gap = 2.0;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: TimelineGridPainter(
+                          tickHeight: tickHeight,
+                          tickCount: tickCount,
+                          lineColor: theme.colorScheme.outline.withOpacity(0.12),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                ...segments.map((s) {
-                  final top = s.startMinute / 60 * _displayPixelsPerHour;
-                  final height = (s.endMinute - s.startMinute) / 60 * _displayPixelsPerHour;
-                  return Positioned(
-                    left: 4,
-                    right: 4,
-                    top: top,
-                    height: height.clamp(4.0, double.infinity),
-                    child: Material(
-                      color: s.color.withOpacity(s.opacity),
-                      borderRadius: BorderRadius.circular(8),
-                      elevation: 0,
-                      child: InkWell(
-                        onTap: () => widget.onItemTap?.call(s.item),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: Opacity(
-                              opacity: textOpacity,
-                              child: Text(
-                                s.item.title,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  shadows: [
-                                    Shadow(offset: Offset(0, 0.5), blurRadius: 1, color: Colors.black26),
-                                    Shadow(offset: Offset(0, 0.5), blurRadius: 2, color: Colors.black12),
-                                  ],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                    Positioned(
+                      right: 4,
+                      bottom: 4,
+                      child: Opacity(
+                        opacity: textOpacity,
+                        child: Text(
+                          dayLabel,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                            fontSize: 13,
                           ),
                         ),
                       ),
                     ),
-                  );
-                }),
-                if (isToday) ...[_buildNowLine(theme), _buildNowDot(theme)],
-              ],
+                    ...segmentsWithLanes.map((entry) {
+                      final (s, lane, totalLanes) = entry;
+                      final top = s.startMinute / 60 * _displayPixelsPerHour;
+                      final height = (s.endMinute - s.startMinute) / 60 * _displayPixelsPerHour;
+                      final laneWidth = totalLanes > 1
+                          ? (w - 8 - (totalLanes - 1) * gap) / totalLanes
+                          : w - 8;
+                      final left = totalLanes > 1 ? 4 + lane * (laneWidth + gap) : 4.0;
+                      final blockHeight = height.clamp(4.0, double.infinity);
+                      final showTitle = blockHeight >= 24;
+                      return Positioned(
+                        left: left,
+                        top: top,
+                        width: laneWidth,
+                        height: blockHeight,
+                        child: Tooltip(
+                          message: s.item.title,
+                          child: Material(
+                            color: s.color.withOpacity(s.opacity),
+                            borderRadius: BorderRadius.circular(8),
+                            elevation: 0,
+                            child: InkWell(
+                              onTap: () => widget.onItemTap?.call(s.item),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: showTitle
+                                    ? Align(
+                                        alignment: Alignment.topLeft,
+                                        child: Opacity(
+                                          opacity: textOpacity,
+                                          child: Text(
+                                            s.item.title,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                              shadows: [
+                                                Shadow(offset: Offset(0, 0.5), blurRadius: 1, color: Colors.black26),
+                                                Shadow(offset: Offset(0, 0.5), blurRadius: 2, color: Colors.black12),
+                                              ],
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    if (isToday) ...[_buildNowLine(theme), _buildNowDot(theme)],
+                  ],
+                );
+              },
             ),
           ),
         ],

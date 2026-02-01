@@ -28,6 +28,7 @@ class _MainShellState extends State<MainShell> {
   int _aboutTapCount = 0;
   Timer? _aboutTapTimer;
   Timer? _aboutOpenTimer;
+  List<Widget>? _eventAppBarActions;
 
   static const List<_NavItem> _items = [
     _NavItem(label: '事件', icon: Icons.event_note),
@@ -43,7 +44,11 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _pages = [
-      const EventScreen(),
+      EventScreen(
+        onAppBarActionsReady: (actions) {
+          if (mounted) setState(() => _eventAppBarActions = actions);
+        },
+      ),
       const StatusScreen(),
       const SmartScreen(),
       const IdeaScreen(),
@@ -140,6 +145,7 @@ class _MainShellState extends State<MainShell> {
       appBar: AppBar(
         title: Text(_items[_currentIndex].label),
         backgroundColor: colorScheme.inversePrimary,
+        actions: _currentIndex == 0 ? (_eventAppBarActions ?? []) : null,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),

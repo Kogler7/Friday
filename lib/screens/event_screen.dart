@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../common/slidable_action_tile.dart';
 import '../constants/app_config.dart';
 import '../models/event/todo_item.dart';
 import '../services/dev_todo_sample.dart';
@@ -15,15 +16,12 @@ enum _EventFilter {
   completed,
 }
 
-/// 事件页当前视图：时间轴 / 列表
-enum _EventView {
-  timeline,
-  list,
-}
-
 /// 事件页：用于记录事件（原 TodoScreen）
+/// 左滑切换至事件列表，时间轴页右滑展开日期标签
 class EventScreen extends StatefulWidget {
-  const EventScreen({super.key});
+  final void Function(List<Widget> actions)? onAppBarActionsReady;
+
+  const EventScreen({super.key, this.onAppBarActionsReady});
 
   @override
   State<EventScreen> createState() => _EventScreenState();
@@ -32,13 +30,59 @@ class EventScreen extends StatefulWidget {
 class _EventScreenState extends State<EventScreen> {
   List<TodoItem> _items = [];
   _EventFilter _filter = _EventFilter.all;
-  _EventView _view = _EventView.list;
   bool _useTestData = false;
+
+  final PageController _pageController = PageController(initialPage: 0);
+  int _currentPage = 0;
+  bool _labelsExpanded = false;
+  Offset? _dragStart;
+  final TodoTimelineController _timelineController = TodoTimelineController();
 
   @override
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifyAppBarActions());
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _timelineController.dispose();
+    super.dispose();
+  }
+
+  void _notifyAppBarActions() {
+    widget.onAppBarActionsReady?.call(_buildAppBarActions());
+  }
+
+  List<Widget> _buildAppBarActions() {
+    final theme = Theme.of(context);
+    return [
+      IconButton(
+        icon: const Icon(Icons.refresh, size: 22),
+        onPressed: _load,
+        tooltip: '刷新',
+      ),
+      IconButton(
+        icon: const Icon(Icons.restore, size: 22),
+        onPressed: _timelineController.reset,
+        tooltip: '还原',
+      ),
+      if (kIsDevMode)
+        IconButton(
+          icon: Icon(
+            _useTestData ? Icons.folder_special : Icons.folder_outlined,
+            size: 22,
+            color: _useTestData ? theme.colorScheme.primary : null,
+          ),
+          tooltip: _useTestData ? '测试数据' : '真实数据',
+          onPressed: () {
+            _toggleTestData();
+            WidgetsBinding.instance.addPostFrameCallback((_) => _notifyAppBarActions());
+          },
+        ),
+    ];
   }
 
   void _load() {
@@ -95,19 +139,32 @@ class _EventScreenState extends State<EventScreen> {
   }
 
   Widget _buildTimelineBody() {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            child: TodoTimeline(
-              items: _items,
-              today: DateTime.now(),
-              onRefresh: _load,
-              onItemTap: (item) => _openEditSheet(item),
-            ),
-          ),
-        ),
-      ],
+    return Listener(
+      onPointerDown: (e) => _dragStart = e.position,
+      onPointerMove: (e) {
+        if (_currentPage == 0 && _dragStart != null) {
+          final delta = e.position - _dragStart!;
+          final shouldExpand = delta.dx > 60 && delta.dx > delta.dy.abs();
+          if (_labelsExpanded != shouldExpand) {
+            setState(() => _labelsExpanded = shouldExpand);
+          }
+        }
+      },
+      onPointerUp: (_) {
+        if (_labelsExpanded) setState(() => _labelsExpanded = false);
+        _dragStart = null;
+      },
+      onPointerCancel: (_) {
+        if (_labelsExpanded) setState(() => _labelsExpanded = false);
+        _dragStart = null;
+      },
+      child: TodoTimeline(
+        items: _items,
+        today: DateTime.now(),
+        onItemTap: (item) => _openEditSheet(item),
+        controller: _timelineController,
+        labelsExpanded: _labelsExpanded,
+      ),
     );
   }
 
@@ -163,25 +220,24 @@ class _EventScreenState extends State<EventScreen> {
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final item = filtered[index];
-                    return Dismissible(
+                    return SlidableActionTile(
                       key: Key(item.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        color: theme.colorScheme.errorContainer,
-                        child: Icon(
-                          Icons.delete_outline,
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
+                      height: 72,
+                      leftAction: SwipeActionConfig(
+                        icon: Icons.delete_outline,
+                        backgroundColor: Colors.red,
+                        onTrigger: () => _delete(item.id),
                       ),
-                      onDismissed: (_) => _delete(item.id),
+                      rightAction: SwipeActionConfig(
+                        icon: Icons.check_circle_outline,
+                        backgroundColor: Colors.blue,
+                        onTrigger: () => _toggle(item),
+                      ),
                       child: _EventListTile(
                         item: item,
                         theme: theme,
                         onToggle: () => _toggle(item),
                         onTap: () => _openEditSheet(item),
-                        onDelete: () => _delete(item.id),
                       ),
                     );
                   },
@@ -237,55 +293,19 @@ class _EventScreenState extends State<EventScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (i) => setState(() => _currentPage = i),
+        physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<_EventView>(
-                    segments: const [
-                      ButtonSegment<_EventView>(
-                        value: _EventView.timeline,
-                        icon: Icon(Icons.schedule, size: 20),
-                        label: Text('时间轴'),
-                      ),
-                      ButtonSegment<_EventView>(
-                        value: _EventView.list,
-                        icon: Icon(Icons.list, size: 20),
-                        label: Text('事件列表'),
-                      ),
-                    ],
-                    selected: {_view},
-                    onSelectionChanged: (Set<_EventView> s) {
-                      if (s.isNotEmpty) setState(() => _view = s.first);
-                    },
-                  ),
-                ),
-                if (kIsDevMode)
-                  IconButton(
-                    icon: Icon(
-                      _useTestData ? Icons.folder_special : Icons.folder_outlined,
-                      color: _useTestData ? theme.colorScheme.primary : null,
-                    ),
-                    tooltip: _useTestData ? '测试数据' : '真实数据',
-                    onPressed: _toggleTestData,
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _view == _EventView.timeline
-                ? _buildTimelineBody()
-                : _buildListBody(filtered, theme),
-          ),
+          _buildTimelineBody(),
+          _buildListBody(filtered, theme),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openEditSheet(),
         tooltip: '添加事件',
+        shape: const CircleBorder(),
         child: const Icon(Icons.add),
       ),
     );
@@ -297,14 +317,12 @@ class _EventListTile extends StatelessWidget {
   final ThemeData theme;
   final VoidCallback onToggle;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
 
   const _EventListTile({
     required this.item,
     required this.theme,
     required this.onToggle,
     required this.onTap,
-    required this.onDelete,
   });
 
   static final _dateTimeFmt = DateFormat('MM-dd HH:mm');
@@ -350,11 +368,6 @@ class _EventListTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             )
           : null,
-      trailing: IconButton(
-        icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-        onPressed: onDelete,
-        tooltip: '删除',
-      ),
       onTap: onTap,
     );
   }
