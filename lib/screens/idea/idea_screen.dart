@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../constants/app_config.dart' show userDeveloperMode;
@@ -6,8 +7,8 @@ import '../../models/idea/chat_message.dart';
 import '../../models/idea/idea_session.dart';
 import '../../services/dev_mode_auth_service.dart';
 import '../../services/idea_session_storage.dart';
-import '../../widgets/chat_export_sheet.dart';
 import 'idea_bubble.dart';
+import 'idea_export_sheet.dart';
 
 /// 供 MainShell 渲染会话历史 endDrawer 时使用的属性
 class IdeaDrawerProps {
@@ -65,6 +66,10 @@ class _IdeaScreenState extends State<IdeaScreen>
   IdeaSession? _currentSession;
   List<ChatMessage> _messages = [];
   static final DateFormat _timeFmtFull = DateFormat('yyyy-MM-dd HH:mm');
+
+  /// 多选模式：左侧复选框，选中后可导出
+  bool _multiSelectMode = false;
+  final Set<int> _selectedIndices = <int>{};
 
   /// 右滑展示时间（从左侧滑入）、左滑拉出会话历史（endDrawer）；松手后时间弹回
   double _dragAccumDx = 0;
@@ -233,18 +238,6 @@ class _IdeaScreenState extends State<IdeaScreen>
     }
   }
 
-  void _openExport() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => ChatExportSheet(
-        messages: _messages,
-        onExported: () {},
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // 延后到 build 结束后再通知父组件，避免在 build 中调用父组件 setState
@@ -257,19 +250,64 @@ class _IdeaScreenState extends State<IdeaScreen>
         onNewSession: _createAndSwitchToNewSession,
         onSessionsChanged: _loadCurrentSession,
       ));
-      widget.onAppBarActionsReady?.call([
-        if (widget.onOpenSessionHistory != null)
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: '会话历史',
-            onPressed: widget.onOpenSessionHistory,
-          ),
-        IconButton(
-          icon: const Icon(Icons.add),
-          tooltip: '添加会话',
-          onPressed: _addSession,
-        ),
-      ]);
+      final actions = _multiSelectMode
+          ? [
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: '取消多选',
+                onPressed: () => setState(() {
+                  _multiSelectMode = false;
+                  _selectedIndices.clear();
+                }),
+              ),
+              IconButton(
+                icon: const Icon(Icons.upload_file),
+                tooltip: '导出选中',
+                onPressed: _selectedIndices.isEmpty
+                    ? null
+                    : () {
+                        final selected = _selectedIndices
+                            .map((i) => _messages[i])
+                            .toList()
+                          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useSafeArea: true,
+                          builder: (ctx) => IdeaExportSheet(
+                            messages: selected,
+                            onExported: () {
+                              Navigator.pop(ctx);
+                              setState(() {
+                                _multiSelectMode = false;
+                                _selectedIndices.clear();
+                              });
+                            },
+                          ),
+                        );
+                      },
+              ),
+            ]
+          : [
+              if (widget.onOpenSessionHistory != null)
+                IconButton(
+                  icon: const Icon(Icons.history),
+                  tooltip: '会话历史',
+                  onPressed: widget.onOpenSessionHistory,
+                ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: '添加会话',
+                onPressed: _addSession,
+              ),
+              if (_messages.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.checklist),
+                  tooltip: '多选',
+                  onPressed: () => setState(() => _multiSelectMode = true),
+                ),
+            ];
+      widget.onAppBarActionsReady?.call(actions);
     });
 
     return Scaffold(
@@ -381,10 +419,57 @@ class _IdeaScreenState extends State<IdeaScreen>
                               );
                             }
                             final msg = entry.message!;
-                            return IdeaBubble(
-                              message: msg,
-                              timeStr: _timeFmtFull.format(msg.createdAt),
-                              showTimeAmount: timeVisibility,
+                            final idx = entry.messageIndex!;
+                            if (_multiSelectMode) {
+                              final selected = _selectedIndices.contains(idx);
+                              return InkWell(
+                                onTap: () => setState(() {
+                                  if (selected) {
+                                    _selectedIndices.remove(idx);
+                                  } else {
+                                    _selectedIndices.add(idx);
+                                  }
+                                }),
+                                child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Checkbox(
+                                        value: selected,
+                                        onChanged: (_) => setState(() {
+                                          if (selected) {
+                                            _selectedIndices.remove(idx);
+                                          } else {
+                                            _selectedIndices.add(idx);
+                                          }
+                                        }),
+                                      ),
+                                      Expanded(
+                                        child: IdeaBubble(
+                                          message: msg,
+                                          timeStr: _timeFmtFull.format(msg.createdAt),
+                                          showTimeAmount: timeVisibility,
+                                        ),
+                                      ),
+                                    ],
+                                ),
+                              );
+                            }
+                            return GestureDetector(
+                              onLongPress: () async {
+                                await Clipboard.setData(
+                                  ClipboardData(text: msg.content),
+                                );
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('已复制')),
+                                  );
+                                }
+                              },
+                              child: IdeaBubble(
+                                message: msg,
+                                timeStr: _timeFmtFull.format(msg.createdAt),
+                                showTimeAmount: timeVisibility,
+                              ),
                             );
                           },
                             ),
@@ -428,13 +513,6 @@ class _IdeaScreenState extends State<IdeaScreen>
           );
         },
       ),
-      floatingActionButton: _messages.isEmpty
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.upload_file),
-              tooltip: '导出',
-              onPressed: _openExport,
-            ),
     );
   }
 }
