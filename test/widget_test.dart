@@ -7,11 +7,11 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:planplus/main.dart';
+import 'package:friday/main.dart';
 
 void main() {
-  testWidgets('App loads and shows PlanPlus title', (WidgetTester tester) async {
-    await tester.pumpWidget(const PlanPlusApp());
-    expect(find.text('PlanPlus · 任务规划'), findsOneWidget);
+  testWidgets('App loads and shows Friday title', (WidgetTester tester) async {
+    await tester.pumpWidget(const FridayApp());
+    expect(find.text('Friday · 任务规划'), findsOneWidget);
   });
 }

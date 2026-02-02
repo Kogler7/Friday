@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/settings/settings_preferences.dart';
 
-const String _keySettings = 'planplus_settings';
+const String _keySettings = 'friday_settings';
 
 /// 设置持久化与全局访问；应用启动时需先 [init]。
 class SettingsService {

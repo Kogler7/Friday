@@ -6,8 +6,8 @@ import '../models/idea/chat_message.dart';
 import '../models/idea/idea_session.dart';
 import 'chat_storage_service.dart';
 
-const String _keySessions = 'planplus_idea_sessions';
-const String _keyCurrentId = 'planplus_idea_current_id';
+const String _keySessions = 'friday_idea_sessions';
+const String _keyCurrentId = 'friday_idea_current_id';
 
 /// 多会话存储：会话列表、当前会话、迁移旧单会话数据
 class IdeaSessionStorage {

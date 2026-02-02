@@ -51,6 +51,20 @@ final Map<int, int> _sessionIconFilledToOutlined = {
   Icons.auto_awesome.codePoint: Icons.auto_awesome_outlined.codePoint,
 };
 
+/// codePoint -> 常量 IconData 查找表，用于 tree-shake 兼容（仅返回常量图标，不构造 IconData）
+final Map<int, IconData> _sessionOutlinedCodeToIcon = {
+  for (final e in sessionIconOptions) e.codePoint: e,
+};
+const _sessionFilledIcons = [
+  Icons.chat_bubble, Icons.lightbulb, Icons.note, Icons.edit_note, Icons.folder,
+  Icons.star, Icons.bookmark, Icons.label, Icons.work, Icons.school,
+  Icons.psychology, Icons.auto_awesome, Icons.tips_and_updates, Icons.menu_book,
+  Icons.article, Icons.dashboard, Icons.inventory_2, Icons.push_pin,
+];
+final Map<int, IconData> _sessionFilledCodeToIcon = {
+  for (final e in _sessionFilledIcons) e.codePoint: e,
+};
+
 /// 根据存储的 iconCodePoint 获取显示图标，filled 表示当前会话
 IconData sessionIconForDisplay(int? iconCodePoint, {required bool isCurrent}) {
   final codePoint = iconCodePoint ?? Icons.chat_bubble_outline.codePoint;
@@ -65,10 +79,9 @@ IconData sessionIconForDisplay(int? iconCodePoint, {required bool isCurrent}) {
   } else {
     outlinedCodePoint = filledCodePoint = codePoint;
   }
-  return IconData(
-    isCurrent ? filledCodePoint : outlinedCodePoint,
-    fontFamily: 'MaterialIcons',
-  );
+  return isCurrent
+      ? (_sessionFilledCodeToIcon[filledCodePoint] ?? Icons.chat_bubble)
+      : (_sessionOutlinedCodeToIcon[outlinedCodePoint] ?? Icons.chat_bubble_outline);
 }
 
 /// 会话编辑常用颜色库（现代柔和配色）

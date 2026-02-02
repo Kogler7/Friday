@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// 智能页占位：中间按钮入口，后续接入智能体/语音
-class SmartScreen extends StatelessWidget {
-  const SmartScreen({super.key});
+/// 专注页占位：后续将放置专注等相关功能
+class FocusScreen extends StatelessWidget {
+  const FocusScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -12,20 +12,20 @@ class SmartScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.mic,
+              Icons.self_improvement,
               size: 80,
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 24),
             Text(
-              '智能助手',
+              '专注',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                '后续将接入智能体，帮你自动完成一些工作',
+                '敬请期待',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,

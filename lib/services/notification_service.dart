@@ -12,7 +12,7 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  static const String _channelId = 'planplus_hourly';
+  static const String _channelId = 'friday_hourly';
   static const String _channelName = '小时状态提醒';
 
   /// 点击通知后待处理的小时（由 MainShell 读取并弹窗）

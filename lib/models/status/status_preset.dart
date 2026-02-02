@@ -23,7 +23,20 @@ class StatusPreset {
     this.hidden = false,
   });
 
-  IconData get icon => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
+  /// 预设可选图标集合（常量），用于 tree-shake 兼容的图标查找
+  static const List<IconData> _presetIcons = [
+    Icons.work, Icons.bedtime, Icons.games, Icons.bed, Icons.school,
+    Icons.code, Icons.fitness_center, Icons.directions_car, Icons.restaurant,
+    Icons.psychology, Icons.group, Icons.home_repair_service, Icons.bookmark,
+    Icons.home, Icons.book, Icons.music_note, Icons.movie, Icons.sports_esports,
+  ];
+
+  IconData get icon {
+    for (final icon in _presetIcons) {
+      if (icon.codePoint == iconCodePoint) return icon;
+    }
+    return Icons.bookmark;
+  }
 
   Color get color => Color(colorValue);
 

@@ -8,14 +8,14 @@ import '../services/notification_service.dart';
 import '../widgets/hourly_prompt_dialog.dart';
 import 'about_screen.dart';
 import 'event/event_screen.dart';
+import 'focus/focus_screen.dart';
 import 'idea/idea_screen.dart';
 import 'idea/session_history_drawer.dart';
 import 'settings_screen.dart';
-import 'smart/smart_screen.dart';
-import 'status/status_screen.dart';
+import 'timeline/timeline_screen.dart';
 import 'stats/stats_screen.dart';
 
-/// 底部导航：事件、状态、智能(中)、想法、统计；侧边栏 Drawer：头像、设置、关于
+/// 底部导航：日程、想法、时间轴(中)、专注、统计；侧边栏 Drawer：个人、设置、关于
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -26,7 +26,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   List<Widget>? _eventAppBarActions;
-  List<Widget>? _statusAppBarActions;
+  List<Widget>? _timelineAppBarActions;
   IdeaDrawerProps? _ideaDrawerProps;
   List<Widget>? _ideaAppBarActions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -34,8 +34,8 @@ class _MainShellState extends State<MainShell> {
   static const List<_NavItem> _items = [
     _NavItem(label: '日程', icon: Icons.event_note),
     _NavItem(label: '想法', icon: Icons.lightbulb_outline),
-    _NavItem(label: '智能', icon: Icons.mic),
-    _NavItem(label: '状态', icon: Icons.pie_chart_outline),
+    _NavItem(label: '时间轴', icon: Icons.timeline),
+    _NavItem(label: '专注', icon: Icons.self_improvement),
     _NavItem(label: '统计', icon: Icons.analytics_outlined),
   ];
 
@@ -59,12 +59,12 @@ class _MainShellState extends State<MainShell> {
         },
         onOpenSessionHistory: () => _scaffoldKey.currentState?.openEndDrawer(),
       ),
-      const SmartScreen(),
-      StatusScreen(
+      TimelineScreen(
         onAppBarActionsReady: (actions) {
-          if (mounted) setState(() => _statusAppBarActions = actions);
+          if (mounted) setState(() => _timelineAppBarActions = actions);
         },
       ),
+      const FocusScreen(),
       const StatsScreen(),
     ];
     HourlyPromptService.setShowPrompt((hourToRecord) {
@@ -133,7 +133,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    const int smartIndex = 2;
+    const int timelineIndex = 2;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -146,7 +146,7 @@ class _MainShellState extends State<MainShell> {
             ? (_eventAppBarActions ?? [])
             : _currentIndex == 1
                 ? (_ideaAppBarActions ?? [])
-                : (_currentIndex == 3 ? (_statusAppBarActions ?? []) : null),
+                : (_currentIndex == 2 ? (_timelineAppBarActions ?? []) : null),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -178,7 +178,7 @@ class _MainShellState extends State<MainShell> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'PlanPlus',
+                      'Friday',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
@@ -253,7 +253,7 @@ class _MainShellState extends State<MainShell> {
           children: [
             _buildNavItem(context, 0, colorScheme),
             _buildNavItem(context, 1, colorScheme),
-            _buildCenterSmartButton(context, colorScheme, smartIndex),
+            _buildCenterTimelineButton(context, colorScheme, timelineIndex),
             _buildNavItem(context, 3, colorScheme),
             _buildNavItem(context, 4, colorScheme),
           ],
@@ -306,18 +306,19 @@ class _MainShellState extends State<MainShell> {
 
   IconData _selectedIcon(IconData outline) {
     if (outline == Icons.lightbulb_outline) return Icons.lightbulb;
-    if (outline == Icons.pie_chart_outline) return Icons.pie_chart;
+    if (outline == Icons.self_improvement) return Icons.self_improvement;
     if (outline == Icons.event_note) return Icons.event;
     if (outline == Icons.analytics_outlined) return Icons.analytics;
+    if (outline == Icons.timeline) return Icons.timeline;
     return outline;
   }
 
-  Widget _buildCenterSmartButton(
+  Widget _buildCenterTimelineButton(
     BuildContext context,
     ColorScheme colorScheme,
-    int smartIndex,
+    int timelineIndex,
   ) {
-    final selected = _currentIndex == smartIndex;
+    final selected = _currentIndex == timelineIndex;
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.only(top: 8),
@@ -330,12 +331,12 @@ class _MainShellState extends State<MainShell> {
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: () => setState(() => _currentIndex = smartIndex),
+            onTap: () => setState(() => _currentIndex = timelineIndex),
             child: SizedBox(
               width: 48,
               height: 48,
               child: Icon(
-                Icons.mic,
+                Icons.timeline,
                 size: 28,
                 color: selected
                     ? colorScheme.onPrimaryContainer

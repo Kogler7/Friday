@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 class StatusDataSource {
   StatusDataSource._();
 
-  static const String _prefixProd = 'planplus_';
-  static const String _prefixDebugTest = 'planplus_debug_test_';
+  static const String _prefixProd = 'friday_';
+  static const String _prefixDebugTest = 'friday_debug_test_';
 
   static final ValueNotifier<bool> useTestData = ValueNotifier<bool>(false);
 

@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/event/todo_item.dart';
 
-const String _keyTodo = 'planplus_todo';
+const String _keyTodo = 'friday_todo';
 
 /// 待办本地存储
 class TodoStorageService {

@@ -64,7 +64,7 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'PlanPlus',
+                'Friday',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: colorScheme.onSurface,

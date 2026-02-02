@@ -15,18 +15,18 @@ import 'services/todo_storage_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const PlanPlusApp());
+  runApp(const FridayApp());
 }
 
 /// 根组件：监听用户开发者模式与生命周期，切后台或重启时退出开发者模式；仅在开发者模式下显示 debug banner。
-class PlanPlusApp extends StatefulWidget {
-  const PlanPlusApp({super.key});
+class FridayApp extends StatefulWidget {
+  const FridayApp({super.key});
 
   @override
-  State<PlanPlusApp> createState() => _PlanPlusAppState();
+  State<FridayApp> createState() => _FridayAppState();
 }
 
-class _PlanPlusAppState extends State<PlanPlusApp> with WidgetsBindingObserver {
+class _FridayAppState extends State<FridayApp> with WidgetsBindingObserver {
   bool _userDevMode = false;
 
   @override
@@ -67,7 +67,7 @@ class _PlanPlusAppState extends State<PlanPlusApp> with WidgetsBindingObserver {
     final prefs = SettingsService.currentNotifier.value;
     final seedColor = Color(prefs.seedColorValue);
     return MaterialApp(
-      title: 'PlanPlus',
+      title: 'Friday',
       debugShowCheckedModeBanner: _userDevMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
@@ -129,7 +129,7 @@ class _AppLoaderState extends State<_AppLoader> {
         } catch (_) {}
       });
     } catch (e, st) {
-      debugPrint('PlanPlus init error: $e\n$st');
+      debugPrint('Friday init error: $e\n$st');
       if (mounted) setState(() => _error = e.toString());
     }
   }

@@ -6,7 +6,6 @@ import '../../models/event/todo_item.dart';
 import '../../services/dev_todo_sample.dart';
 import '../../services/todo_storage_service.dart';
 import '../../widgets/todo_edit_sheet.dart';
-import '../../widgets/timeline/timeline.dart';
 import 'event_filter_chip.dart';
 import 'event_list_tile.dart';
 
@@ -17,8 +16,7 @@ enum _EventFilter {
   completed,
 }
 
-/// 日程页：用于记录日程（原 TodoScreen）
-/// 左滑切换至日程列表，时间轴页右滑展开日期标签
+/// 日程页：仅展示待办清单，时间轴已移至「时间轴」页
 class EventScreen extends StatefulWidget {
   final void Function(List<Widget> actions)? onAppBarActionsReady;
 
@@ -33,24 +31,11 @@ class _EventScreenState extends State<EventScreen> {
   _EventFilter _filter = _EventFilter.all;
   bool _useTestData = false;
 
-  final PageController _pageController = PageController(initialPage: 0);
-  int _currentPage = 0;
-  bool _labelsExpanded = false;
-  Offset? _dragStart;
-  final TodoTimelineController _timelineController = TodoTimelineController();
-
   @override
   void initState() {
     super.initState();
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) => _notifyAppBarActions());
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    _timelineController.dispose();
-    super.dispose();
   }
 
   void _notifyAppBarActions() {
@@ -64,11 +49,6 @@ class _EventScreenState extends State<EventScreen> {
         icon: const Icon(Icons.refresh, size: 22),
         onPressed: _load,
         tooltip: '刷新',
-      ),
-      IconButton(
-        icon: const Icon(Icons.restore, size: 22),
-        onPressed: _timelineController.reset,
-        tooltip: '还原',
       ),
       if (kDebugMode)
         IconButton(
@@ -137,36 +117,6 @@ class _EventScreenState extends State<EventScreen> {
     }
     await TodoStorageService.deleteTodo(id);
     _load();
-  }
-
-  Widget _buildTimelineBody() {
-    return Listener(
-      onPointerDown: (e) => _dragStart = e.position,
-      onPointerMove: (e) {
-        if (_currentPage == 0 && _dragStart != null) {
-          final delta = e.position - _dragStart!;
-          final shouldExpand = delta.dx > 60 && delta.dx > delta.dy.abs();
-          if (_labelsExpanded != shouldExpand) {
-            setState(() => _labelsExpanded = shouldExpand);
-          }
-        }
-      },
-      onPointerUp: (_) {
-        if (_labelsExpanded) setState(() => _labelsExpanded = false);
-        _dragStart = null;
-      },
-      onPointerCancel: (_) {
-        if (_labelsExpanded) setState(() => _labelsExpanded = false);
-        _dragStart = null;
-      },
-      child: TodoTimeline(
-        items: _items,
-        today: DateTime.now(),
-        onItemTap: (item) => _openEditSheet(item),
-        controller: _timelineController,
-        labelsExpanded: _labelsExpanded,
-      ),
-    );
   }
 
   Widget _buildListBody(List<TodoItem> filtered, ThemeData theme) {
@@ -294,15 +244,7 @@ class _EventScreenState extends State<EventScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (i) => setState(() => _currentPage = i),
-        physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
-        children: [
-          _buildTimelineBody(),
-          _buildListBody(filtered, theme),
-        ],
-      ),
+      body: _buildListBody(filtered, theme),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openEditSheet(),
         tooltip: '添加日程',

@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/idea/chat_message.dart';
 
-const String _keyChat = 'planplus_chat';
+const String _keyChat = 'friday_chat';
 
 /// 想法记录（自聊）的本地存储
 class ChatStorageService {
