@@ -49,6 +49,7 @@ class SettingsService {
 
   static Map<String, dynamic> _toJson(SettingsPreferences p) {
     return {
+      'nickname': p.nickname,
       'statUnitMinutes': p.statUnitMinutes,
       'reminderIntervalMinutes': p.reminderIntervalMinutes,
       'quietStartHour': p.quietPeriodStart.hour,
@@ -61,6 +62,8 @@ class SettingsService {
       'aiApiEndpoint': p.aiApiEndpoint,
       'aiApiKey': p.aiApiKey,
       'aiModel': p.aiModel,
+      'ideaContextMessageCount': p.ideaContextMessageCount,
+      'hourlyPromptEnabled': p.hourlyPromptEnabled,
     };
   }
 
@@ -71,6 +74,7 @@ class SettingsService {
         : ThemeMode.system;
     final quietPresetId = map['quietDefaultPresetId'] as String?;
     return SettingsPreferences(
+      nickname: map['nickname'] as String?,
       statUnitMinutes: (map['statUnitMinutes'] as num?)?.toInt() ?? 20,
       reminderIntervalMinutes:
           (map['reminderIntervalMinutes'] as num?)?.toInt() ?? 60,
@@ -88,6 +92,8 @@ class SettingsService {
       aiApiEndpoint: map['aiApiEndpoint'] as String?,
       aiApiKey: map['aiApiKey'] as String?,
       aiModel: map['aiModel'] as String?,
+      ideaContextMessageCount: (map['ideaContextMessageCount'] as num?)?.toInt() ?? 10,
+      hourlyPromptEnabled: map['hourlyPromptEnabled'] as bool? ?? true,
     );
   }
 }

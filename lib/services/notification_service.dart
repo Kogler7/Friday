@@ -226,9 +226,14 @@ class NotificationService {
 
   /// 安排接下来 24 个整点的定时通知（后台到点也会由系统弹出）；静默时段不安排。
   /// 每次调用前会 [cancelAll]，因此不会因多次重启而堆积。
+  /// 若设置中关闭了定期问卷，则仅取消已有通知不再安排。
   static Future<void> scheduleHourlyPrompts() async {
     if (!_initialized) return;
     await _plugin.cancelAll();
+    if (SettingsService.isInitialized &&
+        !SettingsService.current.hourlyPromptEnabled) {
+      return;
+    }
     final now = DateTime.now();
     final local = tz.TZDateTime.from(now, tz.local);
     String pad(int n) => n < 10 ? '0$n' : '$n';

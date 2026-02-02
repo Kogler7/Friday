@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 
 import '../models/agent/llm_agent.dart';
 import '../screens/agent/agent_management_screen.dart';
+import '../screens/agent/ai_settings_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/agent_storage.dart';
+import '../services/settings_service.dart';
 
 /// 个人侧边栏 Drawer（AI 管理、设置、关于等）
 /// 抽离为独立模块，便于扩展更多入口
-class PersonalDrawer extends StatelessWidget {
+class PersonalDrawer extends StatefulWidget {
   const PersonalDrawer({
     super.key,
     required this.onAboutTap,
@@ -19,47 +21,128 @@ class PersonalDrawer extends StatelessWidget {
   final Future<void> Function() onDevModeEntry;
 
   @override
+  State<PersonalDrawer> createState() => _PersonalDrawerState();
+}
+
+class _PersonalDrawerState extends State<PersonalDrawer> {
+  String? _nickname;
+
+  @override
+  void initState() {
+    super.initState();
+    _nickname = SettingsService.current.nickname;
+  }
+
+  Future<void> _editNickname() async {
+    final controller = TextEditingController(text: _nickname ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('设置昵称'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: '输入你的昵称',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      final trimmed = result.trim();
+      await SettingsService.save(
+        SettingsService.current.copyWith(
+          nickname: trimmed.isEmpty ? null : trimmed,
+          clearNickname: trimmed.isEmpty,
+        ),
+      );
+      setState(() => _nickname = trimmed.isEmpty ? null : trimmed);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final displayName = _nickname?.isNotEmpty == true ? _nickname! : 'Friday';
 
     return Drawer(
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 头部个人信息区
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: colorScheme.primaryContainer,
-                    child: Icon(
-                      Icons.person_outline,
-                      size: 48,
-                      color: colorScheme.onPrimaryContainer,
+            // 头部个人信息区（点击可编辑昵称）
+            InkWell(
+              onTap: _editNickname,
+              child: DrawerHeader(
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: colorScheme.primaryContainer,
+                      child: _nickname?.isNotEmpty == true
+                          ? Text(
+                              _nickname![0].toUpperCase(),
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                color: colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          : Icon(
+                              Icons.person_outline,
+                              size: 48,
+                              color: colorScheme.onPrimaryContainer,
+                            ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Friday',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: colorScheme.onSurface,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            displayName,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ],
                     ),
-                  ),
-                  Text(
-                    '任务与状态规划',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                    Text(
+                      '点击修改昵称',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             // 功能分组区
@@ -72,8 +155,8 @@ class PersonalDrawer extends StatelessWidget {
                   const SizedBox(height: 8),
                   // 通用功能组
                   _GeneralMenuGroup(
-                    onAboutTap: onAboutTap,
-                    onDevModeEntry: onDevModeEntry,
+                    onAboutTap: widget.onAboutTap,
+                    onDevModeEntry: widget.onDevModeEntry,
                   ),
                 ],
               ),
@@ -128,10 +211,7 @@ class _AiMenuGroup extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                      builder: (context) => const SettingsScreen(),
-                      settings: RouteSettings(
-                        arguments: <String, String>{'scrollTo': 'ai'},
-                      ),
+                      builder: (context) => const AiSettingsScreen(),
                     ),
                   );
                 },

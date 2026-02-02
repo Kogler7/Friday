@@ -145,18 +145,25 @@ class LlmApiService {
     };
 
     final url = Uri.parse('$_endpoint/chat/completions');
+    final bodyJson = jsonEncode(body);
     final request = http.Request('POST', url)
       ..headers['Content-Type'] = 'application/json'
       ..headers['Authorization'] = 'Bearer $_apiKey'
-      ..body = jsonEncode(body);
+      ..body = bodyJson;
 
     final client = http.Client();
     final response = await client.send(request);
 
     if (response.statusCode != 200) {
-      final body = await response.stream.bytesToString();
+      final responseBody = await response.stream.bytesToString();
       client.close();
-      throw LlmApiException(_parseErrorFromBody(response.statusCode, body));
+      throw LlmApiException(
+        _parseErrorFromBody(response.statusCode, responseBody),
+        statusCode: response.statusCode,
+        requestUrl: url.toString(),
+        requestBody: bodyJson,
+        responseBody: responseBody,
+      );
     }
 
     String buffer = '';
@@ -230,7 +237,23 @@ class LlmChatResult {
 
 class LlmApiException implements Exception {
   final String message;
-  LlmApiException(this.message);
+  /// HTTP 状态码（若为 HTTP 错误）
+  final int? statusCode;
+  /// 实际访问的 URL
+  final String? requestUrl;
+  /// 实际发送的请求体（JSON 字符串）
+  final String? requestBody;
+  /// 收到的 HTTP 响应体
+  final String? responseBody;
+
+  LlmApiException(
+    this.message, {
+    this.statusCode,
+    this.requestUrl,
+    this.requestBody,
+    this.responseBody,
+  });
+
   @override
   String toString() => message;
 }

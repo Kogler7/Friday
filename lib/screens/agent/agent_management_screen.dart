@@ -238,6 +238,7 @@ class _AgentManagementScreenState extends State<AgentManagementScreen> {
       floatingActionButton: _agents.isNotEmpty
           ? FloatingActionButton(
               onPressed: _addAgent,
+              shape: const CircleBorder(),
               child: const Icon(Icons.add),
             )
           : null,

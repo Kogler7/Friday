@@ -59,7 +59,9 @@ class _FridayAppState extends State<FridayApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.hidden) {
-      exitUserDeveloperMode();
+      if (userDeveloperMode.value && shouldExitDevModeOnBackground) {
+        exitUserDeveloperMode();
+      }
     }
   }
 

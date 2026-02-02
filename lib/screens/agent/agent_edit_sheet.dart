@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/agent/llm_agent.dart';
 import '../../services/agent_storage.dart';
@@ -18,6 +19,7 @@ class _AgentEditSheetState extends State<AgentEditSheet> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _systemPromptController;
   late final TextEditingController _modelOverrideController;
+  late final TextEditingController _maxContextController;
 
   bool get _isEdit => widget.agent != null;
 
@@ -31,6 +33,11 @@ class _AgentEditSheetState extends State<AgentEditSheet> {
         TextEditingController(text: widget.agent?.systemPrompt ?? '');
     _modelOverrideController =
         TextEditingController(text: widget.agent?.modelOverride ?? '');
+    _maxContextController = TextEditingController(
+      text: widget.agent?.maxContextChars != null
+          ? widget.agent!.maxContextChars.toString()
+          : '',
+    );
   }
 
   @override
@@ -39,6 +46,7 @@ class _AgentEditSheetState extends State<AgentEditSheet> {
     _descriptionController.dispose();
     _systemPromptController.dispose();
     _modelOverrideController.dispose();
+    _maxContextController.dispose();
     super.dispose();
   }
 
@@ -49,6 +57,15 @@ class _AgentEditSheetState extends State<AgentEditSheet> {
         const SnackBar(content: Text('请输入 Agent 名称')),
       );
       return;
+    }
+
+    int? maxContextChars;
+    final maxContextStr = _maxContextController.text.trim();
+    if (maxContextStr.isNotEmpty) {
+      final parsed = int.tryParse(maxContextStr);
+      if (parsed != null && parsed >= 0) {
+        maxContextChars = parsed;
+      }
     }
 
     final agent = LlmAgent(
@@ -63,6 +80,7 @@ class _AgentEditSheetState extends State<AgentEditSheet> {
       modelOverride: _modelOverrideController.text.trim().isEmpty
           ? null
           : _modelOverrideController.text.trim(),
+      maxContextChars: maxContextChars,
       createdAt: widget.agent?.createdAt ?? DateTime.now(),
     );
 
@@ -160,12 +178,24 @@ class _AgentEditSheetState extends State<AgentEditSheet> {
                       hintText: '如：gpt-4o，留空使用默认模型',
                       border: OutlineInputBorder(),
                     ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _maxContextController,
+                    decoration: const InputDecoration(
+                      labelText: '最长上下文（字符数，可选）',
+                      hintText: '留空使用全局条数设置；超出后从后向前截断',
+                      border: OutlineInputBorder(),
+                      helperText: '用户+助手消息内容合计字符数上限',
+                    ),
+                    keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _save(),
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    '提示：系统提示词会作为对话的第一条消息发送给 AI，用于定义 Agent 的角色和行为。',
+                    '提示：系统提示词会作为对话的第一条消息发送给 AI。上下文包含用户与助手的历史消息，按字符数上限从后向前截断。',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),

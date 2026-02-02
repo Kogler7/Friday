@@ -3,15 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../constants/app_config.dart' show userDeveloperMode;
+import '../../models/agent/llm_agent.dart';
 import '../../models/idea/chat_message.dart';
 import '../../models/idea/idea_session.dart';
-import '../../services/local_auth_service.dart';
+import '../../services/agent_storage.dart';
 import '../../services/idea_session_storage.dart';
+import '../../services/llm_api_service.dart';
+import '../../services/settings_service.dart';
+import '../../services/local_auth_service.dart';
+import 'agent_picker_overlay.dart';
 import 'idea_bubble.dart';
 import 'idea_export_sheet.dart';
 import 'message_delete_confirm_dialog.dart';
 import 'message_edit_dialog.dart';
+import 'message_detail_screen.dart';
 import 'message_toolbar.dart';
+import 'llm_error_detail_screen.dart';
 
 /// 供 MainShell 渲染会话历史 endDrawer 时使用的属性
 class IdeaDrawerProps {
@@ -33,7 +40,8 @@ class IdeaDrawerProps {
 }
 
 /// 多选状态回调：是否处于多选、退出多选的函数（供 MainShell 拦截返回键时调用）
-typedef IdeaMultiSelectStateCallback = void Function(bool isMultiSelect, VoidCallback exitMultiSelect);
+typedef IdeaMultiSelectStateCallback =
+    void Function(bool isMultiSelect, VoidCallback exitMultiSelect);
 
 /// 想法页：多会话管理，左侧抽屉为个人页、右侧 endDrawer 为会话历史（AppBar 右侧按钮或左滑唤起）；右滑展示消息时间
 class IdeaScreen extends StatefulWidget {
@@ -61,7 +69,12 @@ class _MessageEntry {
   final ChatMessage? message;
   final int? messageIndex;
 
-  _MessageEntry._({this.isDivider = false, this.dividerTime, this.message, this.messageIndex});
+  _MessageEntry._({
+    this.isDivider = false,
+    this.dividerTime,
+    this.message,
+    this.messageIndex,
+  });
 
   factory _MessageEntry.divider(DateTime time) =>
       _MessageEntry._(isDivider: true, dividerTime: time);
@@ -114,6 +127,16 @@ class _IdeaScreenState extends State<IdeaScreen>
   /// 引用消息，展示在输入框上方
   ChatMessage? _quotedMessage;
 
+  /// 输入 @ 后选择的 Agent，发送时转给 LLM
+  LlmAgent? _atAgent;
+
+  /// 输入 @ 后是否显示 Agent 选择浮层
+  bool _showAtOverlay = false;
+
+  /// 流式 LLM 回复：占位消息 id、当前累积内容
+  String? _streamingMessageId;
+  String? _streamingContent;
+
   /// 输入框是否展开为接近全屏高度
   bool _inputExpanded = false;
 
@@ -158,6 +181,14 @@ class _IdeaScreenState extends State<IdeaScreen>
     );
     _scrollController.addListener(_onScrollForMultiSelect);
     userDeveloperMode.addListener(_onUserDevModeChanged);
+    _controller.addListener(_onInputChanged);
+  }
+
+  void _onInputChanged() {
+    final text = _controller.text;
+    if (text.endsWith('@') && !_showAtOverlay) {
+      setState(() => _showAtOverlay = true);
+    }
   }
 
   void _onScrollForMultiSelect() {
@@ -168,6 +199,7 @@ class _IdeaScreenState extends State<IdeaScreen>
 
   @override
   void dispose() {
+    _controller.removeListener(_onInputChanged);
     _dismissMessageToolbar();
     _scrollController.removeListener(_onScrollForMultiSelect);
     userDeveloperMode.removeListener(_onUserDevModeChanged);
@@ -202,6 +234,7 @@ class _IdeaScreenState extends State<IdeaScreen>
     void listener() {
       if (mounted) setState(() => _dragAccumDx = _snapBackAnim!.value);
     }
+
     _snapBackAnim!.addListener(listener);
     _snapBackController.forward(from: 0).then((_) {
       _snapBackAnim?.removeListener(listener);
@@ -259,11 +292,7 @@ class _IdeaScreenState extends State<IdeaScreen>
     _toolbarOverlay = null;
   }
 
-  void _showMessageToolbar(
-    BuildContext itemContext,
-    ChatMessage msg,
-    int idx,
-  ) {
+  void _showMessageToolbar(BuildContext itemContext, ChatMessage msg, int idx) {
     _dismissMessageToolbar();
     final box = itemContext.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
@@ -304,9 +333,9 @@ class _IdeaScreenState extends State<IdeaScreen>
                 onCopy: () async {
                   await Clipboard.setData(ClipboardData(text: msg.content));
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已复制')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('已复制')));
                   }
                 },
                 onMultiSelectOrSelectToHere: () {
@@ -343,35 +372,35 @@ class _IdeaScreenState extends State<IdeaScreen>
       context: context,
       builder: (_) => const MessageDeleteConfirmDialog(),
     );
-    if (result == null || result == MessageDeleteConfirmResult.cancel || _currentSession == null || !mounted) return;
+    if (result == null ||
+        result == MessageDeleteConfirmResult.cancel ||
+        _currentSession == null ||
+        !mounted)
+      return;
     final session = _currentSession!;
     if (result == MessageDeleteConfirmResult.delete) {
-      final newMessages = session.messages.where((m) => m.id != msg.id).toList();
+      final newMessages = session.messages
+          .where((m) => m.id != msg.id)
+          .toList();
       await IdeaSessionStorage.saveSession(
-        session.copyWith(
-          messages: newMessages,
-          updatedAt: DateTime.now(),
-        ),
+        session.copyWith(messages: newMessages, updatedAt: DateTime.now()),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已删除')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已删除')));
       }
     } else {
       final newMessages = session.messages
           .map((m) => m.id == msg.id ? m.copyWith(isHidden: true) : m)
           .toList();
       await IdeaSessionStorage.saveSession(
-        session.copyWith(
-          messages: newMessages,
-          updatedAt: DateTime.now(),
-        ),
+        session.copyWith(messages: newMessages, updatedAt: DateTime.now()),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已删除')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已删除')));
       }
     }
     _loadCurrentSession();
@@ -389,10 +418,7 @@ class _IdeaScreenState extends State<IdeaScreen>
               .map((m) => m.id == msg.id ? m.copyWith(content: newContent) : m)
               .toList();
           await IdeaSessionStorage.saveSession(
-            session.copyWith(
-              messages: newMessages,
-              updatedAt: DateTime.now(),
-            ),
+            session.copyWith(messages: newMessages, updatedAt: DateTime.now()),
           );
           _loadCurrentSession();
         },
@@ -408,7 +434,10 @@ class _IdeaScreenState extends State<IdeaScreen>
     final entries = _buildMessageEntries();
     final offset = _scrollController.offset;
     final viewport = _scrollController.position.viewportDimension;
-    final lastListIndex = ((offset + viewport) / _avgEntryHeight).floor().clamp(0, entries.length - 1);
+    final lastListIndex = ((offset + viewport) / _avgEntryHeight).floor().clamp(
+      0,
+      entries.length - 1,
+    );
     final lastMsgIndex = _lastMessageIndexInEntries(entries, lastListIndex);
     final from = _selectedIndices.reduce((a, b) => a < b ? a : b);
     final to = lastMsgIndex;
@@ -423,7 +452,10 @@ class _IdeaScreenState extends State<IdeaScreen>
     if (_selectedIndices.isEmpty || !_scrollController.hasClients) return;
     final entries = _buildMessageEntries();
     final offset = _scrollController.offset;
-    final firstListIndex = (offset / _avgEntryHeight).floor().clamp(0, entries.length - 1);
+    final firstListIndex = (offset / _avgEntryHeight).floor().clamp(
+      0,
+      entries.length - 1,
+    );
     final firstMsgIndex = _firstMessageIndexInEntries(entries, firstListIndex);
     final to = _selectedIndices.reduce((a, b) => a > b ? a : b);
     final from = firstMsgIndex;
@@ -434,7 +466,10 @@ class _IdeaScreenState extends State<IdeaScreen>
     });
   }
 
-  int _firstMessageIndexInEntries(List<_MessageEntry> entries, int startListIndex) {
+  int _firstMessageIndexInEntries(
+    List<_MessageEntry> entries,
+    int startListIndex,
+  ) {
     for (var i = startListIndex; i >= 0; i--) {
       if (!entries[i].isDivider && entries[i].messageIndex != null) {
         return entries[i].messageIndex!;
@@ -443,7 +478,10 @@ class _IdeaScreenState extends State<IdeaScreen>
     return 0;
   }
 
-  int _lastMessageIndexInEntries(List<_MessageEntry> entries, int endListIndex) {
+  int _lastMessageIndexInEntries(
+    List<_MessageEntry> entries,
+    int endListIndex,
+  ) {
     for (var i = endListIndex; i < entries.length; i++) {
       if (!entries[i].isDivider && entries[i].messageIndex != null) {
         return entries[i].messageIndex!;
@@ -454,14 +492,12 @@ class _IdeaScreenState extends State<IdeaScreen>
 
   Future<void> _switchToSession(IdeaSession session) async {
     if (session.isLocked) {
-      final result = await LocalAuthService.authenticate(
-        reason: '验证身份以查看该会话',
-      );
+      final result = await LocalAuthService.authenticate(reason: '验证身份以查看该会话');
       if (result == LocalAuthResult.failed) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('验证未通过，无法打开该会话')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('验证未通过，无法打开该会话')));
         }
         return;
       }
@@ -486,40 +522,101 @@ class _IdeaScreenState extends State<IdeaScreen>
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     final quoted = _quotedMessage;
-    setState(() => _quotedMessage = null);
+    final atAgent = _atAgent;
+    setState(() {
+      _quotedMessage = null;
+      _atAgent = null;
+      _showAtOverlay = false;
+    });
     _controller.clear();
-    if (_currentSession == null) {
+    if (_currentSession == null && atAgent == null) {
       final session = await IdeaSessionStorage.createSessionWithFirstMessage(
         text,
       );
       await IdeaSessionStorage.setCurrentSessionId(session.id);
       _loadCurrentSession();
-      if (_scrollController.hasClients) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
+      _scrollToBottom();
       return;
     }
-    final msg = ChatMessage(
+    if (_currentSession == null && atAgent != null) {
+      final session = await IdeaSessionStorage.createSessionWithFirstMessage(
+        text,
+      );
+      await IdeaSessionStorage.setCurrentSessionId(session.id);
+      final assistantId = '${DateTime.now().millisecondsSinceEpoch}_assistant';
+      final assistantMsg = ChatMessage(
+        id: assistantId,
+        createdAt: DateTime.now(),
+        content: '',
+        role: 'assistant',
+        llmAgentId: atAgent.id,
+        llmAgentName: atAgent.name,
+      );
+      final newMessages = List<ChatMessage>.from(session.messages)
+        ..add(assistantMsg);
+      final updated = session.copyWith(
+        messages: newMessages,
+        updatedAt: DateTime.now(),
+      );
+      await IdeaSessionStorage.saveSession(updated);
+      _loadCurrentSession();
+      _scrollToBottom();
+      setState(() {
+        _streamingMessageId = assistantId;
+        _streamingContent = '';
+      });
+      _requestLlmReply(updated, text, atAgent, assistantId);
+      return;
+    }
+    final session = _currentSession!;
+    final userMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       createdAt: DateTime.now(),
       content: text,
       quotedMessageId: quoted?.id,
       quotedContent: quoted != null
-          ? (quoted.content.length > 40 ? '${quoted.content.substring(0, 40)}…' : quoted.content)
+          ? (quoted.content.length > 40
+                ? '${quoted.content.substring(0, 40)}…'
+                : quoted.content)
           : null,
     );
-    final session = _currentSession!;
-    final newMessages = List<ChatMessage>.from(session.messages)..add(msg);
+    List<ChatMessage> newMessages = List<ChatMessage>.from(session.messages)
+      ..add(userMsg);
+    if (atAgent != null) {
+      final assistantId = '${DateTime.now().millisecondsSinceEpoch}_assistant';
+      final assistantMsg = ChatMessage(
+        id: assistantId,
+        createdAt: DateTime.now(),
+        content: '',
+        role: 'assistant',
+        llmAgentId: atAgent.id,
+        llmAgentName: atAgent.name,
+      );
+      newMessages = List<ChatMessage>.from(newMessages)..add(assistantMsg);
+      final newTitle = session.title == '未命名会话' && newMessages.isNotEmpty
+          ? IdeaSessionStorage.sessionTitle(
+              session.copyWith(messages: newMessages),
+            )
+          : session.title;
+      final updated = session.copyWith(
+        messages: newMessages,
+        updatedAt: DateTime.now(),
+        title: newTitle,
+      );
+      await IdeaSessionStorage.saveSession(updated);
+      _loadCurrentSession();
+      _scrollToBottom();
+      setState(() {
+        _streamingMessageId = assistantId;
+        _streamingContent = '';
+      });
+      _requestLlmReply(updated, text, atAgent, assistantId);
+      return;
+    }
     final newTitle = session.title == '未命名会话' && newMessages.isNotEmpty
-        ? IdeaSessionStorage.sessionTitle(session.copyWith(messages: newMessages))
+        ? IdeaSessionStorage.sessionTitle(
+            session.copyWith(messages: newMessages),
+          )
         : session.title;
     final updated = session.copyWith(
       messages: newMessages,
@@ -528,17 +625,161 @@ class _IdeaScreenState extends State<IdeaScreen>
     );
     await IdeaSessionStorage.saveSession(updated);
     _loadCurrentSession();
-    if (_scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+    _scrollToBottom();
+  }
+
+  Future<void> _requestLlmReply(
+    IdeaSession session,
+    String userContent, [
+    LlmAgent? agent,
+    String? assistantId,
+  ]) async {
+    if (!LlmApiService.isConfigured) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('请先在设置中配置 API 接入点和密钥')));
+      }
+      if (assistantId != null)
+        _removeAssistantPlaceholder(session.id, assistantId);
+      return;
     }
+    final globalContextCount = SettingsService.current.ideaContextMessageCount;
+    final contextMessages = <LlmMessage>[];
+    if (session.messages.isNotEmpty) {
+      int startIndex;
+      final maxChars = agent?.maxContextChars;
+      if (maxChars != null && maxChars > 0) {
+        int totalChars = 0;
+        startIndex = session.messages.length;
+        for (var i = session.messages.length - 1; i >= 0; i--) {
+          totalChars += session.messages[i].content.length;
+          if (totalChars > maxChars) {
+            startIndex = i + 1;
+            break;
+          }
+          startIndex = i;
+        }
+      } else {
+        startIndex = (session.messages.length - globalContextCount).clamp(0, session.messages.length);
+        if (globalContextCount <= 0) startIndex = session.messages.length;
+      }
+      for (var i = startIndex; i < session.messages.length; i++) {
+        final m = session.messages[i];
+        contextMessages.add(LlmMessage(role: m.role, content: m.content));
+      }
+    }
+    contextMessages.add(LlmMessage(role: 'user', content: userContent));
+    try {
+      final stream = LlmApiService.chatStreamWithAgent(
+        messages: contextMessages,
+        agent: agent,
+      );
+      await for (final chunk in stream) {
+        if (!mounted) return;
+        setState(() => _streamingContent = (_streamingContent ?? '') + chunk);
+        _scrollToBottom();
+      }
+    } on LlmApiException catch (e) {
+      if (mounted) {
+        _showLlmErrorSnackBar(
+          context,
+          e.message,
+          e.toString(),
+          statusCode: e.statusCode,
+          requestUrl: e.requestUrl,
+          requestBody: e.requestBody,
+          responseBody: e.responseBody,
+        );
+      }
+      if (assistantId != null)
+        _removeAssistantPlaceholder(session.id, assistantId);
+    } catch (e, stack) {
+      if (mounted) {
+        _showLlmErrorSnackBar(
+          context,
+          e.toString(),
+          stack.toString(),
+        );
+      }
+      if (assistantId != null)
+        _removeAssistantPlaceholder(session.id, assistantId);
+    }
+    if (!mounted) return;
+    final content = _streamingContent ?? '';
+    setState(() {
+      _streamingMessageId = null;
+      _streamingContent = null;
+    });
+    if (assistantId == null) return;
+    final s = IdeaSessionStorage.getSession(session.id);
+    if (s == null) return;
+    final newMessages = s.messages.map((m) {
+      if (m.id == assistantId) return m.copyWith(content: content);
+      return m;
+    }).toList();
+    await IdeaSessionStorage.saveSession(
+      s.copyWith(messages: newMessages, updatedAt: DateTime.now()),
+    );
+    _loadCurrentSession();
+  }
+
+  void _showLlmErrorSnackBar(
+    BuildContext context,
+    String message,
+    String detailContent, {
+    int? statusCode,
+    String? requestUrl,
+    String? requestBody,
+    String? responseBody,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Expanded(child: Text(message)),
+            if (_isDevMode)
+              TextButton.icon(
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                label: const Text('查看详情'),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => LlmErrorDetailScreen(
+                        title: 'Agent 返回错误',
+                        errorMessage: message,
+                        detailContent: detailContent,
+                        statusCode: statusCode,
+                        requestUrl: requestUrl,
+                        requestBody: requestBody,
+                        responseBody: responseBody,
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeAssistantPlaceholder(
+    String sessionId,
+    String assistantId,
+  ) async {
+    final s = IdeaSessionStorage.getSession(sessionId);
+    if (s == null) return;
+    final newMessages = s.messages.where((m) => m.id != assistantId).toList();
+    await IdeaSessionStorage.saveSession(
+      s.copyWith(messages: newMessages, updatedAt: DateTime.now()),
+    );
+    setState(() {
+      _streamingMessageId = null;
+      _streamingContent = null;
+    });
+    _loadCurrentSession();
   }
 
   @override
@@ -546,14 +787,16 @@ class _IdeaScreenState extends State<IdeaScreen>
     // 延后到 build 结束后再通知父组件，避免在 build 中调用父组件 setState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      widget.onSessionDrawerPropsReady?.call(IdeaDrawerProps(
-        currentSessionId: _currentSession?.id,
-        sessionTitle: _currentSession?.title,
-        isDevMode: _isDevMode,
-        onSessionSelected: _switchToSession,
-        onNewSession: _createAndSwitchToNewSession,
-        onSessionsChanged: _loadCurrentSession,
-      ));
+      widget.onSessionDrawerPropsReady?.call(
+        IdeaDrawerProps(
+          currentSessionId: _currentSession?.id,
+          sessionTitle: _currentSession?.title,
+          isDevMode: _isDevMode,
+          onSessionSelected: _switchToSession,
+          onNewSession: _createAndSwitchToNewSession,
+          onSessionsChanged: _loadCurrentSession,
+        ),
+      );
       final actions = _multiSelectMode
           ? [
               IconButton(
@@ -575,10 +818,11 @@ class _IdeaScreenState extends State<IdeaScreen>
                 onPressed: _selectedIndices.isEmpty
                     ? null
                     : () {
-                        final selected = _selectedIndices
-                            .map((i) => _messages[i])
-                            .toList()
-                          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+                        final selected =
+                            _selectedIndices.map((i) => _messages[i]).toList()
+                              ..sort(
+                                (a, b) => a.createdAt.compareTo(b.createdAt),
+                              );
                         showModalBottomSheet<void>(
                           context: context,
                           isScrollControlled: true,
@@ -612,17 +856,6 @@ class _IdeaScreenState extends State<IdeaScreen>
                 tooltip: '添加会话',
                 onPressed: _addSession,
               ),
-              if (_messages.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.checklist),
-                  tooltip: '多选',
-                  onPressed: () {
-                    setState(() => _multiSelectMode = true);
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _notifyMultiSelectState();
-                    });
-                  },
-                ),
             ];
       widget.onAppBarActionsReady?.call(actions);
     });
@@ -631,11 +864,7 @@ class _IdeaScreenState extends State<IdeaScreen>
       body: Builder(
         builder: (scaffoldContext) {
           if (_inputExpanded) {
-            return Column(
-              children: [
-                Expanded(child: _buildExpandedInput()),
-              ],
-            );
+            return Column(children: [Expanded(child: _buildExpandedInput())]);
           }
           return Column(
             children: [
@@ -644,7 +873,8 @@ class _IdeaScreenState extends State<IdeaScreen>
                   behavior: HitTestBehavior.translucent,
                   onPointerDown: (_) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) FocusManager.instance.primaryFocus?.unfocus();
+                      if (mounted)
+                        FocusManager.instance.primaryFocus?.unfocus();
                     });
                   },
                   child: _messages.isEmpty
@@ -656,15 +886,20 @@ class _IdeaScreenState extends State<IdeaScreen>
                                 _currentSession == null
                                     ? '选择或新建一个会话开始记录想法'
                                     : '写点什么吧，记录你的想法',
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                style: Theme.of(context).textTheme.bodyLarge
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                     ),
                               ),
                               const SizedBox(height: 16),
                               OutlinedButton.icon(
                                 onPressed: widget.onOpenSessionHistory != null
                                     ? widget.onOpenSessionHistory!
-                                    : () => Scaffold.of(scaffoldContext).openEndDrawer(),
+                                    : () => Scaffold.of(
+                                        scaffoldContext,
+                                      ).openEndDrawer(),
                                 icon: const Icon(Icons.history),
                                 label: const Text('会话历史'),
                               ),
@@ -672,236 +907,385 @@ class _IdeaScreenState extends State<IdeaScreen>
                           ),
                         )
                       : Builder(
-                        builder: (context) {
-                          final messageEntries = _buildMessageEntries();
-                          final timeVisibility = (_dragAccumDx / _dragForFullTime)
-                              .clamp(0.0, 1.0);
-                          bool showSelectToHereAtTop = false;
-                          bool showSelectToHereAtBottom = false;
-                          if (_multiSelectMode &&
-                              _selectedIndices.isNotEmpty &&
-                              _messages.isNotEmpty &&
-                              _scrollController.hasClients) {
-                            final offset = _scrollController.offset;
-                            final viewport = _scrollController.position.viewportDimension;
-                            final firstListIndex = (offset / _avgEntryHeight).floor().clamp(0, messageEntries.length - 1);
-                            final lastListIndex = ((offset + viewport) / _avgEntryHeight).floor().clamp(0, messageEntries.length - 1);
-                            final firstVisibleMsg = _firstMessageIndexInEntries(messageEntries, firstListIndex);
-                            final lastVisibleMsg = _lastMessageIndexInEntries(messageEntries, lastListIndex);
-                            final visibleHasSelected = _selectedIndices.any((i) => i >= firstVisibleMsg && i <= lastVisibleMsg);
-                            if (!visibleHasSelected) {
-                              final minSelected = _selectedIndices.reduce((a, b) => a < b ? a : b);
-                              final maxSelected = _selectedIndices.reduce((a, b) => a > b ? a : b);
-                              if (maxSelected < firstVisibleMsg) {
-                                showSelectToHereAtBottom = true;
-                              } else if (minSelected > lastVisibleMsg) {
-                                showSelectToHereAtTop = true;
+                          builder: (context) {
+                            final messageEntries = _buildMessageEntries();
+                            final timeVisibility =
+                                (_dragAccumDx / _dragForFullTime).clamp(
+                                  0.0,
+                                  1.0,
+                                );
+                            bool showSelectToHereAtTop = false;
+                            bool showSelectToHereAtBottom = false;
+                            if (_multiSelectMode &&
+                                _selectedIndices.isNotEmpty &&
+                                _messages.isNotEmpty &&
+                                _scrollController.hasClients) {
+                              final offset = _scrollController.offset;
+                              final viewport =
+                                  _scrollController.position.viewportDimension;
+                              final firstListIndex = (offset / _avgEntryHeight)
+                                  .floor()
+                                  .clamp(0, messageEntries.length - 1);
+                              final lastListIndex =
+                                  ((offset + viewport) / _avgEntryHeight)
+                                      .floor()
+                                      .clamp(0, messageEntries.length - 1);
+                              final firstVisibleMsg =
+                                  _firstMessageIndexInEntries(
+                                    messageEntries,
+                                    firstListIndex,
+                                  );
+                              final lastVisibleMsg = _lastMessageIndexInEntries(
+                                messageEntries,
+                                lastListIndex,
+                              );
+                              final visibleHasSelected = _selectedIndices.any(
+                                (i) =>
+                                    i >= firstVisibleMsg && i <= lastVisibleMsg,
+                              );
+                              if (!visibleHasSelected) {
+                                final minSelected = _selectedIndices.reduce(
+                                  (a, b) => a < b ? a : b,
+                                );
+                                final maxSelected = _selectedIndices.reduce(
+                                  (a, b) => a > b ? a : b,
+                                );
+                                if (maxSelected < firstVisibleMsg) {
+                                  showSelectToHereAtBottom = true;
+                                } else if (minSelected > lastVisibleMsg) {
+                                  showSelectToHereAtTop = true;
+                                }
                               }
                             }
-                          }
-                          return Stack(
-                            children: [
-                              Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerDown: (_) {
-                              _dragStartX = null;
-                            },
-                            onPointerUp: (_) {
-                              _snapBackTime();
-                            },
-                            onPointerCancel: (_) {
-                              _snapBackTime();
-                            },
-                            onPointerMove: (e) {
-                              _dragStartX ??= e.position.dx;
-                              final dx = e.delta.dx;
-                              final dy = e.delta.dy;
-                              final hasScrollSpace = _scrollController.hasClients &&
-                                  _scrollController.position.maxScrollExtent > 1;
-                              if (hasScrollSpace && dx.abs() < 3 * dy.abs()) {
-                                return;
-                              }
-                              if (!hasScrollSpace && dy.abs() > 2 * dx.abs()) {
-                                return;
-                              }
-                              setState(() {
-                                _dragAccumDx += dx;
-                                if (_dragAccumDx < -_dragToOpenSessionHistory) {
-                                  _dragAccumDx = 0;
-                                  _dragStartX = null;
-                                  widget.onOpenSessionHistory?.call();
-                                }
-                              });
-                            },
-                            child: ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              itemCount: messageEntries.length,
-                              itemBuilder: (context, index) {
-                                final entry = messageEntries[index];
-                            if (entry.isDivider) {
-                              final timeStr =
-                                  _timeFmtDivider.format(entry.dividerTime!);
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 12),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                        child: Divider(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .outlineVariant),
+                            return Stack(
+                              children: [
+                                Listener(
+                                  behavior: HitTestBehavior.translucent,
+                                  onPointerDown: (_) {
+                                    _dragStartX = null;
+                                  },
+                                  onPointerUp: (_) {
+                                    _snapBackTime();
+                                  },
+                                  onPointerCancel: (_) {
+                                    _snapBackTime();
+                                  },
+                                  onPointerMove: (e) {
+                                    _dragStartX ??= e.position.dx;
+                                    final dx = e.delta.dx;
+                                    final dy = e.delta.dy;
+                                    final hasScrollSpace =
+                                        _scrollController.hasClients &&
+                                        _scrollController
+                                                .position
+                                                .maxScrollExtent >
+                                            1;
+                                    if (hasScrollSpace &&
+                                        dx.abs() < 3 * dy.abs()) {
+                                      return;
+                                    }
+                                    if (!hasScrollSpace &&
+                                        dy.abs() > 2 * dx.abs()) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      _dragAccumDx += dx;
+                                      if (_dragAccumDx <
+                                          -_dragToOpenSessionHistory) {
+                                        _dragAccumDx = 0;
+                                        _dragStartX = null;
+                                        widget.onOpenSessionHistory?.call();
+                                      }
+                                    });
+                                  },
+                                  child: ListView.builder(
+                                    controller: _scrollController,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
                                     ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12),
-                                      child: Text(
-                                        timeStr,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
+                                    itemCount: messageEntries.length,
+                                    itemBuilder: (context, index) {
+                                      final entry = messageEntries[index];
+                                      if (entry.isDivider) {
+                                        final timeStr = _timeFmtDivider.format(
+                                          entry.dividerTime!,
+                                        );
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Divider(
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.outlineVariant,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                    ),
+                                                child: Text(
+                                                  timeStr,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                      ),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: Divider(
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.outlineVariant,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+                                      final msg = entry.message!;
+                                      final idx = entry.messageIndex!;
+                                      if (_multiSelectMode) {
+                                        final selected = _selectedIndices
+                                            .contains(idx);
+                                        return Builder(
+                                          builder: (itemContext) {
+                                            return GestureDetector(
+                                              onLongPress: () =>
+                                                  _showMessageToolbar(
+                                                    itemContext,
+                                                    msg,
+                                                    idx,
+                                                  ),
+                                              child: InkWell(
+                                                onTap: () => setState(() {
+                                                  if (selected) {
+                                                    _selectedIndices.remove(
+                                                      idx,
+                                                    );
+                                                  } else {
+                                                    _selectedIndices.add(idx);
+                                                  }
+                                                }),
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.end,
+                                                  children: [
+                                                    Checkbox(
+                                                      value: selected,
+                                                      onChanged: (_) =>
+                                                          setState(() {
+                                                            if (selected) {
+                                                              _selectedIndices
+                                                                  .remove(idx);
+                                                            } else {
+                                                              _selectedIndices
+                                                                  .add(idx);
+                                                            }
+                                                          }),
+                                                    ),
+                                                    Expanded(
+                                                      child: IdeaBubble(
+                                                        message: msg,
+                                                        timeStr: _timeFmtShort
+                                                            .format(
+                                                              msg.createdAt,
+                                                            ),
+                                                        showTimeAmount:
+                                                            timeVisibility,
+                                                        streamingContent:
+                                                            msg.id ==
+                                                                _streamingMessageId
+                                                            ? _streamingContent
+                                                            : null,
+                                                        isHidden: msg.isHidden,
+                                                        onOpenFullContent: (content) =>
+                                                            Navigator.of(
+                                                              context,
+                                                            ).push(
+                                                              MaterialPageRoute(
+                                                                builder: (_) =>
+                                                                    MessageDetailScreen(
+                                                                      content:
+                                                                          content,
+                                                                      title: msg
+                                                                          .llmAgentName,
+                                                                    ),
+                                                              ),
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      }
+                                      return Builder(
+                                        builder: (itemContext) {
+                                          return GestureDetector(
+                                            onLongPress: () =>
+                                                _showMessageToolbar(
+                                                  itemContext,
+                                                  msg,
+                                                  idx,
+                                                ),
+                                            child: IdeaBubble(
+                                              message: msg,
+                                              timeStr: _timeFmtShort.format(
+                                                msg.createdAt,
+                                              ),
+                                              showTimeAmount: timeVisibility,
+                                              streamingContent:
+                                                  msg.id == _streamingMessageId
+                                                  ? _streamingContent
+                                                  : null,
+                                              isHidden: msg.isHidden,
+                                              onOpenFullContent: (content) =>
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          MessageDetailScreen(
+                                                            content: content,
+                                                            title: msg
+                                                                .llmAgentName,
+                                                          ),
+                                                    ),
+                                                  ),
                                             ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                                if (showSelectToHereAtTop)
+                                  Positioned(
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    child: Material(
+                                      elevation: 2,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceContainerHigh,
+                                      child: SafeArea(
+                                        bottom: false,
+                                        child: InkWell(
+                                          onTap: _selectRangeToVisibleTop,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.arrow_downward,
+                                                  size: 20,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  '选择到这里',
+                                                  style: TextStyle(
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    Expanded(
-                                        child: Divider(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .outlineVariant),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            final msg = entry.message!;
-                            final idx = entry.messageIndex!;
-                            if (_multiSelectMode) {
-                              final selected = _selectedIndices.contains(idx);
-                              return Builder(
-                                builder: (itemContext) {
-                                  return GestureDetector(
-                                    onLongPress: () =>
-                                        _showMessageToolbar(itemContext, msg, idx),
-                                    child: InkWell(
-                                      onTap: () => setState(() {
-                                        if (selected) {
-                                          _selectedIndices.remove(idx);
-                                        } else {
-                                          _selectedIndices.add(idx);
-                                        }
-                                      }),
-                                      child: Row(
-                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                          children: [
-                                            Checkbox(
-                                              value: selected,
-                                              onChanged: (_) => setState(() {
-                                                if (selected) {
-                                                  _selectedIndices.remove(idx);
-                                                } else {
-                                                  _selectedIndices.add(idx);
-                                                }
-                                              }),
-                                            ),
-                                            Expanded(
-                                              child: IdeaBubble(
-                                                message: msg,
-                                                timeStr: _timeFmtShort.format(msg.createdAt),
-                                                showTimeAmount: timeVisibility,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                    ),
-                                  );
-                                },
-                              );
-                            }
-                            return Builder(
-                              builder: (itemContext) {
-                                return GestureDetector(
-                                  onLongPress: () =>
-                                      _showMessageToolbar(itemContext, msg, idx),
-                                  child: IdeaBubble(
-                                    message: msg,
-                                    timeStr: _timeFmtShort.format(msg.createdAt),
-                                    showTimeAmount: timeVisibility,
                                   ),
-                                );
-                              },
+                                if (showSelectToHereAtBottom)
+                                  Positioned(
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    child: Material(
+                                      elevation: 2,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceContainerHigh,
+                                      child: SafeArea(
+                                        top: false,
+                                        child: InkWell(
+                                          onTap: _selectRangeToVisibleBottom,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.arrow_upward,
+                                                  size: 20,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  '选择到这里',
+                                                  style: TextStyle(
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             );
                           },
-                            ),
-                          ),
-                              if (showSelectToHereAtTop)
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: Material(
-                                    elevation: 2,
-                                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                    child: SafeArea(
-                                      bottom: false,
-                                      child: InkWell(
-                                        onTap: _selectRangeToVisibleTop,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.arrow_downward, size: 20, color: Theme.of(context).colorScheme.primary),
-                                              const SizedBox(width: 8),
-                                              Text('选择到这里', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              if (showSelectToHereAtBottom)
-                                Positioned(
-                                  bottom: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: Material(
-                                    elevation: 2,
-                                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                    child: SafeArea(
-                                      top: false,
-                                      child: InkWell(
-                                        onTap: _selectRangeToVisibleBottom,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.arrow_upward, size: 20, color: Theme.of(context).colorScheme.primary),
-                                              const SizedBox(width: 8),
-                                              Text('选择到这里', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
+                        ),
                 ),
               ),
               const Divider(height: 1),
+              if (_showAtOverlay)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                  child: AgentPickerOverlay(
+                    agents: AgentStorage.getAll(),
+                    onAgentSelected: (agent) {
+                      _controller.text = _controller.text + agent.name + ' ';
+                      _controller.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _controller.text.length),
+                      );
+                      setState(() {
+                        _atAgent = agent;
+                        _showAtOverlay = false;
+                      });
+                    },
+                    onDismiss: () => setState(() => _showAtOverlay = false),
+                  ),
+                ),
               if (_quotedMessage != null)
                 Material(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -920,8 +1304,11 @@ class _IdeaScreenState extends State<IdeaScreen>
                             _quotedMessage!.content.length > 50
                                 ? '${_quotedMessage!.content.substring(0, 50)}…'
                                 : _quotedMessage!.content,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -930,7 +1317,8 @@ class _IdeaScreenState extends State<IdeaScreen>
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
                           tooltip: '取消引用',
-                          onPressed: () => setState(() => _quotedMessage = null),
+                          onPressed: () =>
+                              setState(() => _quotedMessage = null),
                           style: IconButton.styleFrom(
                             padding: const EdgeInsets.all(4),
                             minimumSize: const Size(32, 32),
@@ -950,10 +1338,10 @@ class _IdeaScreenState extends State<IdeaScreen>
                         controller: _controller,
                         maxLines: 4,
                         minLines: 1,
-                        decoration: const InputDecoration(
-                          hintText: '记录想法…',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
+                        decoration: InputDecoration(
+                          hintText: '记录此刻的想法…',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 10,
                           ),
@@ -998,7 +1386,7 @@ class _IdeaScreenState extends State<IdeaScreen>
               expands: true,
               textAlignVertical: TextAlignVertical.top,
               decoration: const InputDecoration(
-                hintText: '记录想法…',
+                hintText: '记录此刻的想法…',
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 12,

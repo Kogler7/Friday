@@ -8,6 +8,8 @@ class LlmAgent {
   final String? modelOverride;
   /// 描述，用于展示
   final String? description;
+  /// 最长上下文字符数（用户+助手消息内容合计），超出从后向前截断；null 表示使用全局条数设置
+  final int? maxContextChars;
   final DateTime createdAt;
 
   const LlmAgent({
@@ -16,6 +18,7 @@ class LlmAgent {
     this.systemPrompt,
     this.modelOverride,
     this.description,
+    this.maxContextChars,
     required this.createdAt,
   });
 
@@ -25,7 +28,9 @@ class LlmAgent {
     String? systemPrompt,
     String? modelOverride,
     String? description,
+    int? maxContextChars,
     DateTime? createdAt,
+    bool clearMaxContextChars = false,
   }) {
     return LlmAgent(
       id: id ?? this.id,
@@ -33,6 +38,7 @@ class LlmAgent {
       systemPrompt: systemPrompt ?? this.systemPrompt,
       modelOverride: modelOverride ?? this.modelOverride,
       description: description ?? this.description,
+      maxContextChars: clearMaxContextChars ? null : (maxContextChars ?? this.maxContextChars),
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -43,6 +49,7 @@ class LlmAgent {
         if (systemPrompt != null) 'systemPrompt': systemPrompt,
         if (modelOverride != null) 'modelOverride': modelOverride,
         if (description != null) 'description': description,
+        if (maxContextChars != null) 'maxContextChars': maxContextChars,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -53,6 +60,7 @@ class LlmAgent {
       systemPrompt: json['systemPrompt'] as String?,
       modelOverride: json['modelOverride'] as String?,
       description: json['description'] as String?,
+      maxContextChars: (json['maxContextChars'] as num?)?.toInt(),
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }

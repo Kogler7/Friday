@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 /// 状态统计与提醒相关设置（可扩展，后期支持批量修改）
 class SettingsPreferences {
+  /// 用户昵称/称呼
+  final String? nickname;
+
   /// 状态统计单位（分钟），如 20 表示每 20 分钟一个单位
   final int statUnitMinutes;
 
@@ -32,7 +35,14 @@ class SettingsPreferences {
   /// AI 模型名称（如 gpt-4o-mini）
   final String? aiModel;
 
+  /// 想法页：发给 AI 助手的会话上下文条数（最近 N 条），0 表示不发送上下文，默认 10
+  final int ideaContextMessageCount;
+
+  /// 是否开启定期问卷询问（每小时提醒填写状态）
+  final bool hourlyPromptEnabled;
+
   const SettingsPreferences({
+    this.nickname,
     this.statUnitMinutes = 20,
     this.reminderIntervalMinutes = 60,
     this.quietPeriodStart = const TimeOfDay(hour: 2, minute: 0),
@@ -43,6 +53,8 @@ class SettingsPreferences {
     this.aiApiEndpoint,
     this.aiApiKey,
     this.aiModel,
+    this.ideaContextMessageCount = 10,
+    this.hourlyPromptEnabled = true,
   });
 
   /// 某时刻是否处于静默时段（2:00～10:00 视为静默，不含 10:00）
@@ -71,6 +83,8 @@ class SettingsPreferences {
   }
 
   SettingsPreferences copyWith({
+    String? nickname,
+    bool clearNickname = false,
     int? statUnitMinutes,
     int? reminderIntervalMinutes,
     TimeOfDay? quietPeriodStart,
@@ -81,8 +95,11 @@ class SettingsPreferences {
     String? aiApiEndpoint,
     String? aiApiKey,
     String? aiModel,
+    int? ideaContextMessageCount,
+    bool? hourlyPromptEnabled,
   }) {
     return SettingsPreferences(
+      nickname: clearNickname ? null : (nickname ?? this.nickname),
       statUnitMinutes: statUnitMinutes ?? this.statUnitMinutes,
       reminderIntervalMinutes:
           reminderIntervalMinutes ?? this.reminderIntervalMinutes,
@@ -95,6 +112,8 @@ class SettingsPreferences {
       aiApiEndpoint: aiApiEndpoint ?? this.aiApiEndpoint,
       aiApiKey: aiApiKey ?? this.aiApiKey,
       aiModel: aiModel ?? this.aiModel,
+      ideaContextMessageCount: ideaContextMessageCount ?? this.ideaContextMessageCount,
+      hourlyPromptEnabled: hourlyPromptEnabled ?? this.hourlyPromptEnabled,
     );
   }
 }

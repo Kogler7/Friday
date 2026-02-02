@@ -59,18 +59,19 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
   }
 
   Future<void> _onLock(IdeaSession session) async {
-    if (session.isLocked) {
-      final result = await LocalAuthService.authenticate(
-        reason: '验证身份以解锁该会话',
-      );
-      if (result == LocalAuthResult.failed) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('验证未通过，无法解锁')),
-          );
-        }
-        return;
+    final isUnlock = session.isLocked;
+    final result = await LocalAuthService.authenticate(
+      reason: isUnlock ? '验证身份以解锁该会话' : '验证身份以锁定该会话',
+    );
+    if (result == LocalAuthResult.failed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isUnlock ? '验证未通过，无法解锁' : '验证未通过，无法锁定'),
+          ),
+        );
       }
+      return;
     }
     final updated = session.copyWith(isLocked: !session.isLocked);
     await IdeaSessionStorage.saveSession(updated);

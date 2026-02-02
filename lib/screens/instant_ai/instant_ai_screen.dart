@@ -53,6 +53,7 @@ class _InstantAiScreenState extends State<InstantAiScreen> with SingleTickerProv
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -95,27 +96,25 @@ class _InstantAiScreenState extends State<InstantAiScreen> with SingleTickerProv
             left: 0,
             right: 0,
             bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Center(
-                  child: Material(
-                    color: colorScheme.primary,
-                    elevation: 4,
-                    shadowColor: colorScheme.primary.withValues(alpha: 0.5),
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: _onAiButtonTap,
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(
-                          Icons.auto_awesome,
-                          size: 28,
-                          color: colorScheme.onPrimary,
-                        ),
+            height: 64 + bottomPadding,
+            child: Padding(
+              padding: EdgeInsets.only(top: 8, bottom: bottomPadding),
+              child: Center(
+                child: Material(
+                  color: colorScheme.primary,
+                  elevation: 4,
+                  shadowColor: colorScheme.primary.withValues(alpha: 0.5),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: _onAiButtonTap,
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(
+                        Icons.auto_awesome,
+                        size: 28,
+                        color: colorScheme.onPrimary,
                       ),
                     ),
                   ),

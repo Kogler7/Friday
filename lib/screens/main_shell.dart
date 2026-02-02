@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_config.dart';
 import '../services/local_auth_service.dart';
+import '../widgets/dev_mode_exit_timing_sheet.dart';
 import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/hourly_prompt_dialog.dart';
 import '../widgets/personal_drawer.dart';
 import 'about_screen.dart';
@@ -124,6 +126,7 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
     final hour = NotificationService.pendingHourToRecord;
     if (hour == null || !mounted) return;
     NotificationService.clearPendingHour();
+    if (!SettingsService.current.hourlyPromptEnabled) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       showHourlyPromptDialog(context, hourStart: hour);
@@ -150,6 +153,74 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
   }
 
   Future<void> _handleDevModeEntry() async {
+    final isDevMode = userDeveloperMode.value;
+
+    if (isDevMode) {
+      // 已设置过退出时机：再次触发则立刻退出
+      if (devModeExitTiming.value != null) {
+        exitUserDeveloperMode();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已退出开发者模式')),
+        );
+        return;
+      }
+      // 未设置退出时机：弹出选择框
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        builder: (ctx) => DevModeExitTimingSheet(
+          onSelected: (option, [duration]) {
+            switch (option) {
+              case DevModeExitOption.immediate:
+                exitUserDeveloperMode();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已退出开发者模式')),
+                  );
+                }
+                break;
+              case DevModeExitOption.onBackground:
+                devModeExitTiming.value = DevModeExitTiming.onBackground;
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('将在切回后台时退出开发者模式')),
+                  );
+                }
+                break;
+              case DevModeExitOption.afterDelay:
+                if (duration != null) {
+                  devModeExitTiming.value = DevModeExitTiming.afterDelay;
+                  startDevModeExitTimer(duration);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '将在 ${duration.inMinutes} 分钟后自动退出开发者模式',
+                        ),
+                      ),
+                    );
+                  }
+                }
+                break;
+              case DevModeExitOption.untilExit:
+                devModeExitTiming.value = DevModeExitTiming.untilExit;
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('将保持开发者模式直到再次触发或退出 App'),
+                    ),
+                  );
+                }
+                break;
+            }
+          },
+        ),
+      );
+      return;
+    }
+
+    // 普通模式：验证后进入开发者模式
     final result = await LocalAuthService.authenticate(
       reason: '验证身份以进入开发者模式',
     );

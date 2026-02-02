@@ -49,6 +49,10 @@ class HourlyPromptService {
 
   /// 正式：整点后前 10 分钟内检查上一间隔；静默时段内不提醒并自动填默认状态
   static void _runProdCheck() {
+    if (SettingsService.isInitialized &&
+        !SettingsService.current.hourlyPromptEnabled) {
+      return;
+    }
     final now = DateTime.now();
     final intervalMin = SettingsService.isInitialized
         ? SettingsService.current.reminderIntervalMinutes
@@ -90,6 +94,10 @@ class HourlyPromptService {
 
   /// 开发：每 2 分钟一个槽，当前时间所在 2 分钟块的前一块为「待记录槽」
   static void _runDevCheck() {
+    if (SettingsService.isInitialized &&
+        !SettingsService.current.hourlyPromptEnabled) {
+      return;
+    }
     final now = DateTime.now();
     final floor2Min = DateTime(
       now.year,
