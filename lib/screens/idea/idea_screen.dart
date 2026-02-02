@@ -9,10 +9,14 @@ import '../../services/local_auth_service.dart';
 import '../../services/idea_session_storage.dart';
 import 'idea_bubble.dart';
 import 'idea_export_sheet.dart';
+import 'message_delete_confirm_dialog.dart';
+import 'message_edit_dialog.dart';
+import 'message_toolbar.dart';
 
 /// 供 MainShell 渲染会话历史 endDrawer 时使用的属性
 class IdeaDrawerProps {
   final String? currentSessionId;
+  final String? sessionTitle;
   final bool isDevMode;
   final ValueChanged<IdeaSession> onSessionSelected;
   final VoidCallback onNewSession;
@@ -20,6 +24,7 @@ class IdeaDrawerProps {
 
   const IdeaDrawerProps({
     required this.currentSessionId,
+    this.sessionTitle,
     required this.isDevMode,
     required this.onSessionSelected,
     required this.onNewSession,
@@ -27,17 +32,22 @@ class IdeaDrawerProps {
   });
 }
 
+/// 多选状态回调：是否处于多选、退出多选的函数（供 MainShell 拦截返回键时调用）
+typedef IdeaMultiSelectStateCallback = void Function(bool isMultiSelect, VoidCallback exitMultiSelect);
+
 /// 想法页：多会话管理，左侧抽屉为个人页、右侧 endDrawer 为会话历史（AppBar 右侧按钮或左滑唤起）；右滑展示消息时间
 class IdeaScreen extends StatefulWidget {
   final void Function(IdeaDrawerProps)? onSessionDrawerPropsReady;
   final void Function(List<Widget>)? onAppBarActionsReady;
   final VoidCallback? onOpenSessionHistory;
+  final IdeaMultiSelectStateCallback? onMultiSelectStateChange;
 
   const IdeaScreen({
     super.key,
     this.onSessionDrawerPropsReady,
     this.onAppBarActionsReady,
     this.onOpenSessionHistory,
+    this.onMultiSelectStateChange,
   });
 
   @override
@@ -65,14 +75,49 @@ class _IdeaScreenState extends State<IdeaScreen>
   final ScrollController _scrollController = ScrollController();
   IdeaSession? _currentSession;
   List<ChatMessage> _messages = [];
-  static final DateFormat _timeFmtFull = DateFormat('yyyy-MM-dd HH:mm');
+  static final DateFormat _timeFmtShort = DateFormat('HH:mm');
+  static final DateFormat _timeFmtDivider = DateFormat('yyyy-MM-dd HH:mm');
 
-  /// 多选模式：左侧复选框，选中后可导出
+  /// 多选模式：左侧复选框，选中后可导出；可视区无选中时显示顶部/底部「选择到这里」
   bool _multiSelectMode = false;
   final Set<int> _selectedIndices = <int>{};
 
+  /// 多选模式下从当前已选范围扩展到包含消息 idx 的连续区间
+  void _selectRangeToMessage(int idx) {
+    if (!_multiSelectMode || _selectedIndices.isEmpty) return;
+    final from = _selectedIndices.reduce((a, b) => a < b ? a : b);
+    final to = _selectedIndices.reduce((a, b) => a > b ? a : b);
+    final low = from < idx ? from : idx;
+    final high = to > idx ? to : idx;
+    setState(() {
+      for (var i = low; i <= high; i++) {
+        _selectedIndices.add(i);
+      }
+    });
+  }
+
+  void _exitMultiSelect() {
+    if (!_multiSelectMode) return;
+    setState(() {
+      _multiSelectMode = false;
+      _selectedIndices.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _notifyMultiSelectState();
+    });
+  }
+
+  void _notifyMultiSelectState() {
+    widget.onMultiSelectStateChange?.call(_multiSelectMode, _exitMultiSelect);
+  }
+
+  /// 引用消息，展示在输入框上方
+  ChatMessage? _quotedMessage;
+
   /// 输入框是否展开为接近全屏高度
   bool _inputExpanded = false;
+
+  OverlayEntry? _toolbarOverlay;
 
   /// 右滑展示时间（从左侧滑入）、左滑拉出会话历史（endDrawer）；松手后时间弹回
   double _dragAccumDx = 0;
@@ -111,11 +156,20 @@ class _IdeaScreenState extends State<IdeaScreen>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
+    _scrollController.addListener(_onScrollForMultiSelect);
     userDeveloperMode.addListener(_onUserDevModeChanged);
+  }
+
+  void _onScrollForMultiSelect() {
+    if (_multiSelectMode && mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _dismissMessageToolbar();
+    _scrollController.removeListener(_onScrollForMultiSelect);
     userDeveloperMode.removeListener(_onUserDevModeChanged);
     _snapBackController.dispose();
     _controller.dispose();
@@ -124,10 +178,13 @@ class _IdeaScreenState extends State<IdeaScreen>
   }
 
   void _onUserDevModeChanged() {
-    if (userDeveloperMode.value) return;
-    IdeaSessionStorage.ensureCurrentSessionVisible().then((_) {
+    if (userDeveloperMode.value) {
       if (mounted) _loadCurrentSession();
-    });
+    } else {
+      IdeaSessionStorage.ensureCurrentSessionVisible().then((_) {
+        if (mounted) _loadCurrentSession();
+      });
+    }
   }
 
   void _snapBackTime() {
@@ -148,10 +205,12 @@ class _IdeaScreenState extends State<IdeaScreen>
     _snapBackAnim!.addListener(listener);
     _snapBackController.forward(from: 0).then((_) {
       _snapBackAnim?.removeListener(listener);
-      if (mounted) setState(() {
-        _dragAccumDx = 0;
-        _dragStartX = null;
-      });
+      if (mounted) {
+        setState(() {
+          _dragAccumDx = 0;
+          _dragStartX = null;
+        });
+      }
       _snapBackController.reset();
     });
   }
@@ -176,8 +235,221 @@ class _IdeaScreenState extends State<IdeaScreen>
     }
     setState(() {
       _currentSession = session;
-      _messages = List.from(session.messages)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      var list = List<ChatMessage>.from(session.messages);
+      if (!_isDevMode) list = list.where((m) => !m.isHidden).toList();
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      _messages = list;
     });
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _dismissMessageToolbar() {
+    _toolbarOverlay?.remove();
+    _toolbarOverlay = null;
+  }
+
+  void _showMessageToolbar(
+    BuildContext itemContext,
+    ChatMessage msg,
+    int idx,
+  ) {
+    _dismissMessageToolbar();
+    final box = itemContext.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final globalPos = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final toolbarGlobal = Offset(globalPos.dx, globalPos.dy + size.height);
+
+    final overlayState = Overlay.of(context);
+    final overlayBox = overlayState.context.findRenderObject() as RenderBox?;
+    final double left;
+    final double top;
+    if (overlayBox != null && overlayBox.hasSize) {
+      final local = overlayBox.globalToLocal(toolbarGlobal);
+      left = local.dx;
+      top = local.dy;
+    } else {
+      left = toolbarGlobal.dx;
+      top = toolbarGlobal.dy;
+    }
+
+    _toolbarOverlay = OverlayEntry(
+      builder: (_) {
+        return Stack(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                _dismissMessageToolbar();
+                setState(() {});
+              },
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              child: MessageToolbar(
+                message: msg,
+                isMultiSelectMode: _multiSelectMode,
+                onCopy: () async {
+                  await Clipboard.setData(ClipboardData(text: msg.content));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已复制')),
+                    );
+                  }
+                },
+                onMultiSelectOrSelectToHere: () {
+                  if (_multiSelectMode) {
+                    _selectRangeToMessage(idx);
+                  } else {
+                    setState(() {
+                      _multiSelectMode = true;
+                      _selectedIndices.add(idx);
+                    });
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _notifyMultiSelectState();
+                    });
+                  }
+                },
+                onDelete: () => _confirmDeleteMessage(msg),
+                onEdit: () => _editMessage(msg),
+                onQuote: () {
+                  setState(() => _quotedMessage = msg);
+                },
+                onDismiss: _dismissMessageToolbar,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlayState.insert(_toolbarOverlay!);
+    setState(() {});
+  }
+
+  Future<void> _confirmDeleteMessage(ChatMessage msg) async {
+    final result = await showDialog<MessageDeleteConfirmResult>(
+      context: context,
+      builder: (_) => const MessageDeleteConfirmDialog(),
+    );
+    if (result == null || result == MessageDeleteConfirmResult.cancel || _currentSession == null || !mounted) return;
+    final session = _currentSession!;
+    if (result == MessageDeleteConfirmResult.delete) {
+      final newMessages = session.messages.where((m) => m.id != msg.id).toList();
+      await IdeaSessionStorage.saveSession(
+        session.copyWith(
+          messages: newMessages,
+          updatedAt: DateTime.now(),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已删除')),
+        );
+      }
+    } else {
+      final newMessages = session.messages
+          .map((m) => m.id == msg.id ? m.copyWith(isHidden: true) : m)
+          .toList();
+      await IdeaSessionStorage.saveSession(
+        session.copyWith(
+          messages: newMessages,
+          updatedAt: DateTime.now(),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已删除')),
+        );
+      }
+    }
+    _loadCurrentSession();
+  }
+
+  Future<void> _editMessage(ChatMessage msg) async {
+    if (_currentSession == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => MessageEditDialog(
+        message: msg,
+        onSave: (newContent) async {
+          final session = _currentSession!;
+          final newMessages = session.messages
+              .map((m) => m.id == msg.id ? m.copyWith(content: newContent) : m)
+              .toList();
+          await IdeaSessionStorage.saveSession(
+            session.copyWith(
+              messages: newMessages,
+              updatedAt: DateTime.now(),
+            ),
+          );
+          _loadCurrentSession();
+        },
+      ),
+    );
+  }
+
+  /// 根据滚动位置估算当前可视的消息索引范围（用于「选择到这里」）
+  static const double _avgEntryHeight = 56;
+
+  void _selectRangeToVisibleBottom() {
+    if (_selectedIndices.isEmpty || !_scrollController.hasClients) return;
+    final entries = _buildMessageEntries();
+    final offset = _scrollController.offset;
+    final viewport = _scrollController.position.viewportDimension;
+    final lastListIndex = ((offset + viewport) / _avgEntryHeight).floor().clamp(0, entries.length - 1);
+    final lastMsgIndex = _lastMessageIndexInEntries(entries, lastListIndex);
+    final from = _selectedIndices.reduce((a, b) => a < b ? a : b);
+    final to = lastMsgIndex;
+    setState(() {
+      for (var i = from; i <= to; i++) {
+        _selectedIndices.add(i);
+      }
+    });
+  }
+
+  void _selectRangeToVisibleTop() {
+    if (_selectedIndices.isEmpty || !_scrollController.hasClients) return;
+    final entries = _buildMessageEntries();
+    final offset = _scrollController.offset;
+    final firstListIndex = (offset / _avgEntryHeight).floor().clamp(0, entries.length - 1);
+    final firstMsgIndex = _firstMessageIndexInEntries(entries, firstListIndex);
+    final to = _selectedIndices.reduce((a, b) => a > b ? a : b);
+    final from = firstMsgIndex;
+    setState(() {
+      for (var i = from; i <= to; i++) {
+        _selectedIndices.add(i);
+      }
+    });
+  }
+
+  int _firstMessageIndexInEntries(List<_MessageEntry> entries, int startListIndex) {
+    for (var i = startListIndex; i >= 0; i--) {
+      if (!entries[i].isDivider && entries[i].messageIndex != null) {
+        return entries[i].messageIndex!;
+      }
+    }
+    return 0;
+  }
+
+  int _lastMessageIndexInEntries(List<_MessageEntry> entries, int endListIndex) {
+    for (var i = endListIndex; i < entries.length; i++) {
+      if (!entries[i].isDivider && entries[i].messageIndex != null) {
+        return entries[i].messageIndex!;
+      }
+    }
+    return _messages.length - 1;
   }
 
   Future<void> _switchToSession(IdeaSession session) async {
@@ -197,6 +469,7 @@ class _IdeaScreenState extends State<IdeaScreen>
     await IdeaSessionStorage.setCurrentSessionId(session.id);
     _loadCurrentSession();
     if (mounted) Navigator.of(context).pop();
+    _scrollToBottom();
   }
 
   void _addSession() {
@@ -212,6 +485,8 @@ class _IdeaScreenState extends State<IdeaScreen>
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    final quoted = _quotedMessage;
+    setState(() => _quotedMessage = null);
     _controller.clear();
     if (_currentSession == null) {
       final session = await IdeaSessionStorage.createSessionWithFirstMessage(
@@ -236,6 +511,10 @@ class _IdeaScreenState extends State<IdeaScreen>
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       createdAt: DateTime.now(),
       content: text,
+      quotedMessageId: quoted?.id,
+      quotedContent: quoted != null
+          ? (quoted.content.length > 40 ? '${quoted.content.substring(0, 40)}…' : quoted.content)
+          : null,
     );
     final session = _currentSession!;
     final newMessages = List<ChatMessage>.from(session.messages)..add(msg);
@@ -269,6 +548,7 @@ class _IdeaScreenState extends State<IdeaScreen>
       if (!mounted) return;
       widget.onSessionDrawerPropsReady?.call(IdeaDrawerProps(
         currentSessionId: _currentSession?.id,
+        sessionTitle: _currentSession?.title,
         isDevMode: _isDevMode,
         onSessionSelected: _switchToSession,
         onNewSession: _createAndSwitchToNewSession,
@@ -279,10 +559,15 @@ class _IdeaScreenState extends State<IdeaScreen>
               IconButton(
                 icon: const Icon(Icons.close),
                 tooltip: '取消多选',
-                onPressed: () => setState(() {
-                  _multiSelectMode = false;
-                  _selectedIndices.clear();
-                }),
+                onPressed: () {
+                  setState(() {
+                    _multiSelectMode = false;
+                    _selectedIndices.clear();
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _notifyMultiSelectState();
+                  });
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.upload_file),
@@ -306,6 +591,9 @@ class _IdeaScreenState extends State<IdeaScreen>
                                 _multiSelectMode = false;
                                 _selectedIndices.clear();
                               });
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) _notifyMultiSelectState();
+                              });
                             },
                           ),
                         );
@@ -328,7 +616,12 @@ class _IdeaScreenState extends State<IdeaScreen>
                 IconButton(
                   icon: const Icon(Icons.checklist),
                   tooltip: '多选',
-                  onPressed: () => setState(() => _multiSelectMode = true),
+                  onPressed: () {
+                    setState(() => _multiSelectMode = true);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _notifyMultiSelectState();
+                    });
+                  },
                 ),
             ];
       widget.onAppBarActionsReady?.call(actions);
@@ -383,16 +676,54 @@ class _IdeaScreenState extends State<IdeaScreen>
                           final messageEntries = _buildMessageEntries();
                           final timeVisibility = (_dragAccumDx / _dragForFullTime)
                               .clamp(0.0, 1.0);
-                          return Listener(
+                          bool showSelectToHereAtTop = false;
+                          bool showSelectToHereAtBottom = false;
+                          if (_multiSelectMode &&
+                              _selectedIndices.isNotEmpty &&
+                              _messages.isNotEmpty &&
+                              _scrollController.hasClients) {
+                            final offset = _scrollController.offset;
+                            final viewport = _scrollController.position.viewportDimension;
+                            final firstListIndex = (offset / _avgEntryHeight).floor().clamp(0, messageEntries.length - 1);
+                            final lastListIndex = ((offset + viewport) / _avgEntryHeight).floor().clamp(0, messageEntries.length - 1);
+                            final firstVisibleMsg = _firstMessageIndexInEntries(messageEntries, firstListIndex);
+                            final lastVisibleMsg = _lastMessageIndexInEntries(messageEntries, lastListIndex);
+                            final visibleHasSelected = _selectedIndices.any((i) => i >= firstVisibleMsg && i <= lastVisibleMsg);
+                            if (!visibleHasSelected) {
+                              final minSelected = _selectedIndices.reduce((a, b) => a < b ? a : b);
+                              final maxSelected = _selectedIndices.reduce((a, b) => a > b ? a : b);
+                              if (maxSelected < firstVisibleMsg) {
+                                showSelectToHereAtBottom = true;
+                              } else if (minSelected > lastVisibleMsg) {
+                                showSelectToHereAtTop = true;
+                              }
+                            }
+                          }
+                          return Stack(
+                            children: [
+                              Listener(
                             behavior: HitTestBehavior.translucent,
                             onPointerDown: (_) {
                               _dragStartX = null;
+                            },
+                            onPointerUp: (_) {
+                              _snapBackTime();
+                            },
+                            onPointerCancel: (_) {
+                              _snapBackTime();
                             },
                             onPointerMove: (e) {
                               _dragStartX ??= e.position.dx;
                               final dx = e.delta.dx;
                               final dy = e.delta.dy;
-                              if (dy.abs() > 2 * dx.abs()) return;
+                              final hasScrollSpace = _scrollController.hasClients &&
+                                  _scrollController.position.maxScrollExtent > 1;
+                              if (hasScrollSpace && dx.abs() < 3 * dy.abs()) {
+                                return;
+                              }
+                              if (!hasScrollSpace && dy.abs() > 2 * dx.abs()) {
+                                return;
+                              }
                               setState(() {
                                 _dragAccumDx += dx;
                                 if (_dragAccumDx < -_dragToOpenSessionHistory) {
@@ -401,12 +732,6 @@ class _IdeaScreenState extends State<IdeaScreen>
                                   widget.onOpenSessionHistory?.call();
                                 }
                               });
-                            },
-                            onPointerUp: (_) {
-                              _snapBackTime();
-                            },
-                            onPointerCancel: (_) {
-                              _snapBackTime();
                             },
                             child: ListView.builder(
                               controller: _scrollController,
@@ -419,7 +744,7 @@ class _IdeaScreenState extends State<IdeaScreen>
                                 final entry = messageEntries[index];
                             if (entry.isDivider) {
                               final timeStr =
-                                  _timeFmtFull.format(entry.dividerTime!);
+                                  _timeFmtDivider.format(entry.dividerTime!);
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
                                     vertical: 12),
@@ -460,63 +785,161 @@ class _IdeaScreenState extends State<IdeaScreen>
                             final idx = entry.messageIndex!;
                             if (_multiSelectMode) {
                               final selected = _selectedIndices.contains(idx);
-                              return InkWell(
-                                onTap: () => setState(() {
-                                  if (selected) {
-                                    _selectedIndices.remove(idx);
-                                  } else {
-                                    _selectedIndices.add(idx);
-                                  }
-                                }),
-                                child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Checkbox(
-                                        value: selected,
-                                        onChanged: (_) => setState(() {
-                                          if (selected) {
-                                            _selectedIndices.remove(idx);
-                                          } else {
-                                            _selectedIndices.add(idx);
-                                          }
-                                        }),
-                                      ),
-                                      Expanded(
-                                        child: IdeaBubble(
-                                          message: msg,
-                                          timeStr: _timeFmtFull.format(msg.createdAt),
-                                          showTimeAmount: timeVisibility,
+                              return Builder(
+                                builder: (itemContext) {
+                                  return GestureDetector(
+                                    onLongPress: () =>
+                                        _showMessageToolbar(itemContext, msg, idx),
+                                    child: InkWell(
+                                      onTap: () => setState(() {
+                                        if (selected) {
+                                          _selectedIndices.remove(idx);
+                                        } else {
+                                          _selectedIndices.add(idx);
+                                        }
+                                      }),
+                                      child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Checkbox(
+                                              value: selected,
+                                              onChanged: (_) => setState(() {
+                                                if (selected) {
+                                                  _selectedIndices.remove(idx);
+                                                } else {
+                                                  _selectedIndices.add(idx);
+                                                }
+                                              }),
+                                            ),
+                                            Expanded(
+                                              child: IdeaBubble(
+                                                message: msg,
+                                                timeStr: _timeFmtShort.format(msg.createdAt),
+                                                showTimeAmount: timeVisibility,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ],
-                                ),
+                                    ),
+                                  );
+                                },
                               );
                             }
-                            return GestureDetector(
-                              onLongPress: () async {
-                                await Clipboard.setData(
-                                  ClipboardData(text: msg.content),
+                            return Builder(
+                              builder: (itemContext) {
+                                return GestureDetector(
+                                  onLongPress: () =>
+                                      _showMessageToolbar(itemContext, msg, idx),
+                                  child: IdeaBubble(
+                                    message: msg,
+                                    timeStr: _timeFmtShort.format(msg.createdAt),
+                                    showTimeAmount: timeVisibility,
+                                  ),
                                 );
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('已复制')),
-                                  );
-                                }
                               },
-                              child: IdeaBubble(
-                                message: msg,
-                                timeStr: _timeFmtFull.format(msg.createdAt),
-                                showTimeAmount: timeVisibility,
-                              ),
                             );
                           },
                             ),
+                          ),
+                              if (showSelectToHereAtTop)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: Material(
+                                    elevation: 2,
+                                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                    child: SafeArea(
+                                      bottom: false,
+                                      child: InkWell(
+                                        onTap: _selectRangeToVisibleTop,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.arrow_downward, size: 20, color: Theme.of(context).colorScheme.primary),
+                                              const SizedBox(width: 8),
+                                              Text('选择到这里', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              if (showSelectToHereAtBottom)
+                                Positioned(
+                                  bottom: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: Material(
+                                    elevation: 2,
+                                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                    child: SafeArea(
+                                      top: false,
+                                      child: InkWell(
+                                        onTap: _selectRangeToVisibleBottom,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.arrow_upward, size: 20, color: Theme.of(context).colorScheme.primary),
+                                              const SizedBox(width: 8),
+                                              Text('选择到这里', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           );
                         },
                       ),
                 ),
               ),
               const Divider(height: 1),
+              if (_quotedMessage != null)
+                Material(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.format_quote,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _quotedMessage!.content.length > 50
+                                ? '${_quotedMessage!.content.substring(0, 50)}…'
+                                : _quotedMessage!.content,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          tooltip: '取消引用',
+                          onPressed: () => setState(() => _quotedMessage = null),
+                          style: IconButton.styleFrom(
+                            padding: const EdgeInsets.all(4),
+                            minimumSize: const Size(32, 32),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                 child: Row(

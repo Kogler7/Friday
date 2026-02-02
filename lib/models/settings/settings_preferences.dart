@@ -23,6 +23,15 @@ class SettingsPreferences {
   /// 主题色（Color.value），用于 ColorScheme.fromSeed
   final int seedColorValue;
 
+  /// AI API 接入点（如 https://api.openai.com/v1）
+  final String? aiApiEndpoint;
+
+  /// AI API 密钥
+  final String? aiApiKey;
+
+  /// AI 模型名称（如 gpt-4o-mini）
+  final String? aiModel;
+
   const SettingsPreferences({
     this.statUnitMinutes = 20,
     this.reminderIntervalMinutes = 60,
@@ -31,6 +40,9 @@ class SettingsPreferences {
     this.quietPeriodDefaultPresetId,
     this.themeMode = ThemeMode.system,
     this.seedColorValue = 0xFF673AB7,
+    this.aiApiEndpoint,
+    this.aiApiKey,
+    this.aiModel,
   });
 
   /// 某时刻是否处于静默时段（2:00～10:00 视为静默，不含 10:00）
@@ -66,6 +78,9 @@ class SettingsPreferences {
     String? quietPeriodDefaultPresetId,
     ThemeMode? themeMode,
     int? seedColorValue,
+    String? aiApiEndpoint,
+    String? aiApiKey,
+    String? aiModel,
   }) {
     return SettingsPreferences(
       statUnitMinutes: statUnitMinutes ?? this.statUnitMinutes,
@@ -77,6 +92,9 @@ class SettingsPreferences {
           quietPeriodDefaultPresetId ?? this.quietPeriodDefaultPresetId,
       themeMode: themeMode ?? this.themeMode,
       seedColorValue: seedColorValue ?? this.seedColorValue,
+      aiApiEndpoint: aiApiEndpoint ?? this.aiApiEndpoint,
+      aiApiKey: aiApiKey ?? this.aiApiKey,
+      aiModel: aiModel ?? this.aiModel,
     );
   }
 }

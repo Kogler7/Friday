@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../models/idea/chat_message.dart';
 
-/// 时间文字预估宽度，用于从左侧滑入/弹回
-const double _timeSlideWidth = 88;
+/// 时间文字预估宽度（仅 HH:mm）；从屏幕最左侧滑入
+const double _timeSlideWidth = 48;
 
-/// 想法页消息气泡；右滑时时间从最左侧随手势滑入，松手后弹回
+/// 想法页消息气泡；右滑时时间从屏幕最左侧往右滑入，松手后弹回；气泡位置不变
 class IdeaBubble extends StatelessWidget {
   final ChatMessage message;
   final String timeStr;
@@ -36,9 +36,37 @@ class IdeaBubble extends StatelessWidget {
           bottomRight: Radius.circular(4),
         ),
       ),
-      child: Text(
-        message.content,
-        style: theme.textTheme.bodyLarge,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.quotedContent != null && message.quotedContent!.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: theme.colorScheme.outline,
+                    width: 3,
+                  ),
+                ),
+              ),
+              margin: const EdgeInsets.only(left: 4),
+              child: Text(
+                message.quotedContent!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          Text(
+            message.content,
+            style: theme.textTheme.bodyLarge,
+          ),
+        ],
       ),
     );
     final t = showTimeAmount.clamp(0.0, 1.0);
@@ -46,14 +74,12 @@ class IdeaBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Stack(
-        clipBehavior: Clip.hardEdge,
+        clipBehavior: Clip.none,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Flexible(child: bubble),
-            ],
+            children: [Flexible(child: bubble)],
           ),
           Positioned(
             left: 12,

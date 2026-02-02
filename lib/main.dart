@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'constants/app_config.dart';
 import 'screens/main_shell.dart';
 import 'services/activity_tag_storage.dart';
+import 'services/agent_storage.dart';
 import 'services/chat_storage_service.dart';
 import 'services/idea_session_storage.dart';
 import 'services/scheduled_dnd_storage.dart';
@@ -104,6 +105,7 @@ class _AppLoaderState extends State<_AppLoader> {
   Future<void> _init() async {
     try {
       await SettingsService.init();
+      await AgentStorage.init();
       await StorageService.init();
       await StatusPresetStorage.init();
       await ActivityTagStorage.init();

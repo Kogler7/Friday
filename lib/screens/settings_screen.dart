@@ -24,6 +24,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final GlobalKey _aiSectionKey = GlobalKey();
+  bool _hasScrolledToAi = false;
   late int _statUnitMinutes;
   late int _reminderIntervalMinutes;
   late TimeOfDay _quietStart;
@@ -31,6 +33,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String? _quietDefaultPresetId;
   late ThemeMode _themeMode;
   late int _seedColorValue;
+  late TextEditingController _aiApiEndpointController;
+  late TextEditingController _aiApiKeyController;
+  late TextEditingController _aiModelController;
 
   @override
   void initState() {
@@ -43,6 +48,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _quietDefaultPresetId = p.quietPeriodDefaultPresetId ?? 'builtin_resting';
     _themeMode = p.themeMode;
     _seedColorValue = p.seedColorValue;
+    _aiApiEndpointController = TextEditingController(text: p.aiApiEndpoint ?? '');
+    _aiApiKeyController = TextEditingController(text: p.aiApiKey ?? '');
+    _aiModelController = TextEditingController(text: p.aiModel ?? '');
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (!_hasScrolledToAi && args is Map && args['scrollTo'] == 'ai') {
+      _hasScrolledToAi = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _aiSectionKey.currentContext != null) {
+          Scrollable.ensureVisible(_aiSectionKey.currentContext!);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _aiApiEndpointController.dispose();
+    _aiApiKeyController.dispose();
+    _aiModelController.dispose();
+    super.dispose();
   }
 
   Future<void> _saveTheme(ThemeMode? themeMode, int? seedColorValue) async {
@@ -68,6 +98,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         quietPeriodStart: _quietStart,
         quietPeriodEnd: _quietEnd,
         quietPeriodDefaultPresetId: _quietDefaultPresetId,
+        aiApiEndpoint: _aiApiEndpointController.text.trim().isEmpty
+            ? null
+            : _aiApiEndpointController.text.trim(),
+        aiApiKey: _aiApiKeyController.text.trim().isEmpty
+            ? null
+            : _aiApiKeyController.text.trim(),
+        aiModel: _aiModelController.text.trim().isEmpty
+            ? null
+            : _aiModelController.text.trim(),
       ),
     );
     if (mounted) {
@@ -187,6 +226,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       );
                     }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 24),
+          const Text(
+            'AI 配置',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            key: _aiSectionKey,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'API 接入与密钥',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _aiApiEndpointController,
+                    decoration: const InputDecoration(
+                      labelText: 'API 接入点',
+                      hintText: 'https://api.openai.com/v1',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _aiApiKeyController,
+                    decoration: const InputDecoration(
+                      labelText: 'API 密钥',
+                      hintText: 'sk-...',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _aiModelController,
+                    decoration: const InputDecoration(
+                      labelText: '模型名称（可选）',
+                      hintText: 'gpt-4o-mini',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) => setState(() {}),
                   ),
                 ],
               ),

@@ -58,6 +58,9 @@ class SettingsService {
       'quietDefaultPresetId': p.quietPeriodDefaultPresetId,
       'themeMode': p.themeMode.index,
       'seedColorValue': p.seedColorValue,
+      'aiApiEndpoint': p.aiApiEndpoint,
+      'aiApiKey': p.aiApiKey,
+      'aiModel': p.aiModel,
     };
   }
 
@@ -82,6 +85,9 @@ class SettingsService {
       quietPeriodDefaultPresetId: quietPresetId,
       themeMode: themeMode,
       seedColorValue: (map['seedColorValue'] as num?)?.toInt() ?? 0xFF673AB7,
+      aiApiEndpoint: map['aiApiEndpoint'] as String?,
+      aiApiKey: map['aiApiKey'] as String?,
+      aiModel: map['aiModel'] as String?,
     );
   }
 }

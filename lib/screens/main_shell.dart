@@ -1,4 +1,6 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../constants/app_config.dart';
@@ -6,14 +8,15 @@ import '../services/local_auth_service.dart';
 import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/hourly_prompt_dialog.dart';
+import '../widgets/personal_drawer.dart';
 import 'about_screen.dart';
 import 'event/event_screen.dart';
 import 'focus/focus_screen.dart';
 import 'idea/idea_screen.dart';
 import 'idea/session_history_drawer.dart';
-import 'settings_screen.dart';
 import 'timeline/timeline_screen.dart';
 import 'stats/stats_screen.dart';
+import 'instant_ai/instant_ai_screen.dart';
 
 /// 底部导航：日程、想法、时间轴(中)、专注、统计；侧边栏 Drawer：个人、设置、关于
 class MainShell extends StatefulWidget {
@@ -23,13 +26,30 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
   int _currentIndex = 0;
   List<Widget>? _eventAppBarActions;
   List<Widget>? _timelineAppBarActions;
   IdeaDrawerProps? _ideaDrawerProps;
   List<Widget>? _ideaAppBarActions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _centerButtonKey = GlobalKey();
+
+  late final AnimationController _timelineExpandController;
+  late final CurvedAnimation _timelineExpandCurve;
+  /// null: 无遮罩 | expanding: 圆形扩散中 | instant_ai: 显示即时 AI 内容
+  String? _timelineOverlayPhase;
+  /// 遮罩层中 AI 按钮的位置（布局后更新）
+  Rect? _overlayButtonRect;
+  Offset? _overlayCircleCenter;
+  Timer? _longPressActivateTimer;
+
+  /// 想法页多选：是否处于多选、退出多选的回调（返回键优先退出多选）
+  bool _ideaMultiSelectMode = false;
+  VoidCallback? _exitIdeaMultiSelect;
+  /// 双退保底：第一次返回提示「再按一次退出」，第二次真正退出
+  bool _pendingExit = false;
+  Timer? _exitBackTimer;
 
   static const List<_NavItem> _items = [
     _NavItem(label: '日程', icon: Icons.event_note),
@@ -44,6 +64,20 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    _timelineExpandController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _timelineExpandCurve = CurvedAnimation(
+      parent: _timelineExpandController,
+      curve: Curves.easeInOutCubic,
+    );
+    _timelineExpandController.addStatusListener((status) {
+        if (status == AnimationStatus.completed && _timelineOverlayPhase == 'expanding') {
+          if (!mounted) return;
+          setState(() => _timelineOverlayPhase = 'instant_ai');
+        }
+      });
     _pages = [
       EventScreen(
         onAppBarActionsReady: (actions) {
@@ -58,6 +92,14 @@ class _MainShellState extends State<MainShell> {
           if (mounted) setState(() => _ideaAppBarActions = actions);
         },
         onOpenSessionHistory: () => _scaffoldKey.currentState?.openEndDrawer(),
+        onMultiSelectStateChange: (isMultiSelect, exitMultiSelect) {
+          if (mounted) {
+            setState(() {
+              _ideaMultiSelectMode = isMultiSelect;
+              _exitIdeaMultiSelect = exitMultiSelect;
+            });
+          }
+        },
       ),
       TimelineScreen(
         onAppBarActionsReady: (actions) {
@@ -90,6 +132,9 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _exitBackTimer?.cancel();
+    _longPressActivateTimer?.cancel();
+    _timelineExpandController.dispose();
     HourlyPromptService.stop();
     super.dispose();
   }
@@ -131,16 +176,74 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  void _updateOverlayButtonPosition() {
+    if (!mounted || _timelineOverlayPhase != 'expanding') return;
+    final buttonBox = _centerButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (buttonBox == null || !buttonBox.hasSize) return;
+    final topLeft = buttonBox.localToGlobal(Offset.zero);
+    final center = buttonBox.localToGlobal(Offset(buttonBox.size.width / 2, buttonBox.size.height / 2));
+    if (mounted) {
+      setState(() {
+        _overlayButtonRect = Rect.fromLTWH(topLeft.dx, topLeft.dy, buttonBox.size.width, buttonBox.size.height);
+        _overlayCircleCenter = center;
+      });
+    }
+  }
+
+  void _closeInstantAiOverlay() {
+    if (!mounted) return;
+    _timelineExpandController.reset();
+    setState(() {
+      _timelineOverlayPhase = null;
+      _overlayButtonRect = null;
+      _overlayCircleCenter = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     const int timelineIndex = 2;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
+    final bool inIdeaMultiSelect = _currentIndex == 1 && _ideaMultiSelectMode;
+    return PopScope(
+      canPop: _timelineOverlayPhase != 'instant_ai' &&
+          !inIdeaMultiSelect &&
+          _pendingExit,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_timelineOverlayPhase == 'instant_ai') {
+          _closeInstantAiOverlay();
+          return;
+        }
+        if (inIdeaMultiSelect) {
+          _exitIdeaMultiSelect?.call();
+          return;
+        }
+        _exitBackTimer?.cancel();
+        _pendingExit = true;
+        if (mounted) setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('再按一次退出'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        _exitBackTimer = Timer(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() => _pendingExit = false);
+          }
+        });
+      },
+      child: Stack(
+        children: [
+          Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(_items[_currentIndex].label),
+        title: Text(_currentIndex == 1
+            ? (_ideaDrawerProps?.sessionTitle ?? _items[1].label)
+            : _items[_currentIndex].label),
         backgroundColor: colorScheme.inversePrimary,
         actions: _currentIndex == 0
             ? (_eventAppBarActions ?? [])
@@ -155,82 +258,9 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
       ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DrawerHeader(
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: colorScheme.primaryContainer,
-                      child: Icon(
-                        Icons.person_outline,
-                        size: 48,
-                        color: colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Friday',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '任务与状态规划',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Card(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.settings_outlined),
-                        title: const Text('设置'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (context) => const SettingsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.info_outline),
-                        title: const Text('关于'),
-                        onTap: _onAboutTap,
-                        onLongPress: kDebugMode
-                            ? () async {
-                                Navigator.pop(context);
-                                await _handleDevModeEntry();
-                              }
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      drawer: PersonalDrawer(
+        onAboutTap: _onAboutTap,
+        onDevModeEntry: _handleDevModeEntry,
       ),
       endDrawer: _currentIndex == 1 && _ideaDrawerProps != null
           ? SessionHistoryDrawer(
@@ -258,6 +288,23 @@ class _MainShellState extends State<MainShell> {
             _buildNavItem(context, 4, colorScheme),
           ],
         ),
+      ),
+    ),
+        if (_timelineOverlayPhase != null)
+          Positioned.fill(
+            child: Material(
+              type: MaterialType.transparency,
+              child: _timelineOverlayPhase == 'instant_ai'
+                  ? InstantAiScreen(onBack: _closeInstantAiOverlay)
+                  : _TimelineExpandOverlay(
+                      progress: _timelineExpandCurve,
+                      colorScheme: colorScheme,
+                      circleCenter: _overlayCircleCenter,
+                      buttonRect: _overlayButtonRect,
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -313,6 +360,40 @@ class _MainShellState extends State<MainShell> {
     return outline;
   }
 
+  void _onTimelinePointerDown(int timelineIndex) {
+    _longPressActivateTimer?.cancel();
+    _longPressActivateTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      setState(() {
+        _timelineOverlayPhase = 'expanding';
+        _overlayButtonRect = null;
+        _overlayCircleCenter = null;
+      });
+      _timelineExpandController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _updateOverlayButtonPosition());
+    });
+  }
+
+  void _onTimelinePointerUp(int timelineIndex) {
+    _longPressActivateTimer?.cancel();
+    if (_timelineOverlayPhase != null) {
+      if (_timelineOverlayPhase == 'instant_ai') return;
+      if (_timelineExpandController.status == AnimationStatus.completed) return;
+      _timelineExpandController.reverse().then((_) {
+        if (mounted) {
+          _timelineExpandController.reset();
+          setState(() {
+            _timelineOverlayPhase = null;
+            _overlayButtonRect = null;
+            _overlayCircleCenter = null;
+          });
+        }
+      });
+    } else {
+      setState(() => _currentIndex = timelineIndex);
+    }
+  }
+
   Widget _buildCenterTimelineButton(
     BuildContext context,
     ColorScheme colorScheme,
@@ -322,25 +403,31 @@ class _MainShellState extends State<MainShell> {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: Material(
-          color: selected
-              ? colorScheme.primaryContainer
-              : colorScheme.primary,
-          elevation: 4,
-          shadowColor: colorScheme.primary.withValues(alpha: 0.5),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => setState(() => _currentIndex = timelineIndex),
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: Icon(
-                Icons.timeline,
-                size: 28,
-                color: selected
-                    ? colorScheme.onPrimaryContainer
-                    : colorScheme.onPrimary,
+        child: Listener(
+          onPointerDown: (_) => _onTimelinePointerDown(timelineIndex),
+          onPointerUp: (_) => _onTimelinePointerUp(timelineIndex),
+          onPointerCancel: (_) => _onTimelinePointerUp(timelineIndex),
+          child: Material(
+            key: _centerButtonKey,
+            color: selected
+                ? colorScheme.primaryContainer
+                : colorScheme.primary,
+            elevation: 4,
+            shadowColor: colorScheme.primary.withValues(alpha: 0.5),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => setState(() => _currentIndex = timelineIndex),
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Icon(
+                  Icons.timeline,
+                  size: 28,
+                  color: selected
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onPrimary,
+                ),
               ),
             ),
           ),
@@ -348,6 +435,107 @@ class _MainShellState extends State<MainShell> {
       ),
     );
   }
+}
+
+class _TimelineExpandOverlay extends StatelessWidget {
+  const _TimelineExpandOverlay({
+    required this.progress,
+    required this.colorScheme,
+    required this.circleCenter,
+    required this.buttonRect,
+  });
+
+  final Animation<double> progress;
+  final ColorScheme colorScheme;
+  final Offset? circleCenter;
+  final Rect? buttonRect;
+
+  @override
+  Widget build(BuildContext context) {
+    final rect = buttonRect;
+    return IgnorePointer(
+      ignoring: true,
+      child: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: progress,
+            builder: (context, child) {
+              return CustomPaint(
+                painter: _TimelineExpandPainter(
+                  progress: progress.value,
+                  startColor: colorScheme.primary,
+                  endColor: colorScheme.surface,
+                  center: circleCenter,
+                ),
+                size: Size.infinite,
+              );
+            },
+          ),
+          if (rect != null)
+            Positioned(
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+              child: IgnorePointer(
+                ignoring: true,
+                child: Center(
+                  child: Material(
+                    color: colorScheme.primary,
+                    elevation: 4,
+                    shadowColor: colorScheme.primary.withValues(alpha: 0.5),
+                    shape: const CircleBorder(),
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(
+                        Icons.auto_awesome,
+                        size: 28,
+                        color: colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineExpandPainter extends CustomPainter {
+  _TimelineExpandPainter({
+    required this.progress,
+    required this.startColor,
+    required this.endColor,
+    this.center,
+  });
+
+  final double progress;
+  final Color startColor;
+  final Color endColor;
+  final Offset? center;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    final c = center ?? Offset(size.width / 2, size.height);
+    final maxRadius = math.sqrt(
+      math.max(c.dx, size.width - c.dx) * math.max(c.dx, size.width - c.dx) +
+      math.max(c.dy, size.height - c.dy) * math.max(c.dy, size.height - c.dy),
+    );
+    final radius = maxRadius * progress;
+    final color = Color.lerp(startColor, endColor, progress)!;
+    final opacity = progress.clamp(0.0, 1.0);
+    canvas.drawCircle(c, radius, Paint()..color = color.withValues(alpha: opacity));
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelineExpandPainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.startColor != startColor ||
+      oldDelegate.endColor != endColor;
 }
 
 class _NavItem {
