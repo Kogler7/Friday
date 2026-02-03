@@ -1,0 +1,12 @@
+---
+description: 需要填写信息的弹出框优先使用底部弹出框
+globs: **/*.dart
+alwaysApply: true
+---
+
+# 弹出框选择规范
+
+- **需要填写信息的弹出框**：默认使用**底部弹出框**（BottomSheet / showModalBottomSheet）
+  - 占满宽度，视觉更舒适
+  - 可容纳较高的信息密度
+- **提示类型、无需输入的弹出框**：可使用中间弹框（Dialog / showDialog）

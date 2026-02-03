@@ -1,0 +1,31 @@
+---
+description: 悬浮按钮使用圆形，不使用圆角矩形
+globs: **/*.dart
+alwaysApply: true
+---
+
+# 悬浮按钮形状规范
+
+悬浮按钮一律使用**圆形**，不使用圆角矩形。
+
+## Flutter 实现
+
+- 使用 `FloatingActionButton` 时保持默认圆形，或显式指定 `shape: const CircleBorder()`
+- 避免为 FAB 设置 `shape: RoundedRectangleBorder()` 或 `StadiumBorder()`
+- 自定义悬浮式按钮时，使用 `CircleBorder()` 而非圆角矩形
+
+```dart
+// ✅ 正确：圆形
+FloatingActionButton(
+  onPressed: () {},
+  shape: const CircleBorder(),  // 显式圆形（默认即是）
+  child: const Icon(Icons.add),
+)
+
+// ❌ 错误：圆角矩形
+FloatingActionButton(
+  onPressed: () {},
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  child: const Icon(Icons.add),
+)
+```

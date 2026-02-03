@@ -1267,7 +1267,6 @@ class _IdeaScreenState extends State<IdeaScreen>
                         ),
                 ),
               ),
-              const Divider(height: 1),
               if (_showAtOverlay)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
@@ -1345,16 +1344,20 @@ class _IdeaScreenState extends State<IdeaScreen>
                             horizontal: 12,
                             vertical: 10,
                           ),
+                          suffixIcon: IconButton(
+                            onPressed: () =>
+                                setState(() => _inputExpanded = true),
+                            icon: const Icon(Icons.unfold_more, size: 20),
+                            tooltip: '展开输入',
+                            style: IconButton.styleFrom(
+                              padding: const EdgeInsets.all(4),
+                              minimumSize: const Size(32, 32),
+                            ),
+                          ),
                         ),
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => _send(),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: () => setState(() => _inputExpanded = true),
-                      icon: const Icon(Icons.unfold_more),
-                      tooltip: '展开输入',
                     ),
                     const SizedBox(width: 4),
                     IconButton.filled(
@@ -1373,50 +1376,38 @@ class _IdeaScreenState extends State<IdeaScreen>
   }
 
   Widget _buildExpandedInput() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-            child: TextField(
-              controller: _controller,
-              maxLines: null,
-              minLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              decoration: const InputDecoration(
-                hintText: '记录此刻的想法…',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                alignLabelWithHint: true,
-              ),
-              textInputAction: TextInputAction.newline,
-              onSubmitted: (_) {},
-            ),
-          ),
-        ),
-        const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                onPressed: () => setState(() => _inputExpanded = false),
-                icon: const Icon(Icons.unfold_less),
-                tooltip: '收起',
+          child: TextField(
+            controller: _controller,
+            maxLines: null,
+            minLines: null,
+            expands: true,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: const InputDecoration(
+              hintText: '记录此刻的想法…',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
               ),
-              const SizedBox(width: 4),
-              IconButton.filled(
-                onPressed: _send,
-                icon: const Icon(Icons.send),
-                tooltip: '发送',
-              ),
-            ],
+              alignLabelWithHint: true,
+            ),
+            textInputAction: TextInputAction.newline,
+            onSubmitted: (_) {},
+          ),
+        ),
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            onPressed: () => setState(() => _inputExpanded = false),
+            heroTag: 'collapse_input',
+            tooltip: '收起',
+            shape: const CircleBorder(),
+            child: const Icon(Icons.unfold_less),
           ),
         ),
       ],
