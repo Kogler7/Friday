@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'constants/app_config.dart';
 import 'screens/main_shell.dart';
@@ -16,6 +17,11 @@ import 'services/todo_storage_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // 锁定竖屏，避免横屏旋转提示
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   runApp(const FridayApp());
 }
 
