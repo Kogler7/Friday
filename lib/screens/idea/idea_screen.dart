@@ -408,8 +408,9 @@ class _IdeaScreenState extends State<IdeaScreen>
 
   Future<void> _editMessage(ChatMessage msg) async {
     if (_currentSession == null) return;
-    await showDialog<void>(
+    await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (ctx) => MessageEditDialog(
         message: msg,
         onSave: (newContent) async {

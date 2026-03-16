@@ -3,5 +3,6 @@
         "friday"
     ],
     "java.configuration.updateBuildConfiguration": "automatic",
-    "cmake.sourceDirectory": "D:/Projects/Planplus/friday/linux"
+    "cmake.sourceDirectory": "D:/Projects/Planplus/friday/linux",
+    "cmake.ignoreCMakeListsMissing": true
 }

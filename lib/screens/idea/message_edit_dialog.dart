@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/idea/chat_message.dart';
 
-/// 消息编辑对话框
+/// 消息编辑底部弹窗内容（与填写类弹窗一致，占满宽度）
 class MessageEditDialog extends StatefulWidget {
   final ChatMessage message;
   final ValueChanged<String> onSave;
@@ -42,29 +42,52 @@ class _MessageEditDialogState extends State<MessageEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('编辑消息'),
-      content: TextField(
-        controller: _controller,
-        maxLines: 6,
-        minLines: 2,
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    final theme = Theme.of(context);
+    final viewInsets = MediaQuery.of(context).viewInsets;
+    return Padding(
+      padding: EdgeInsets.only(bottom: viewInsets.bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '编辑消息',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: _submit,
+                  child: const Text('保存'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _controller,
+              maxLines: 8,
+              minLines: 3,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+            ),
+          ],
         ),
-        textInputAction: TextInputAction.done,
-        onSubmitted: (_) => _submit(),
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 }

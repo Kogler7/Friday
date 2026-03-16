@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 import '../constants/app_config.dart';
 import '../services/local_auth_service.dart';
 import '../widgets/dev_mode_exit_timing_sheet.dart';
-import '../services/hourly_prompt_service.dart';
-import '../services/notification_service.dart';
-import '../services/settings_service.dart';
-import '../widgets/hourly_prompt_dialog.dart';
+// 定期问卷已关闭
+// import '../services/hourly_prompt_service.dart';
+// import '../services/notification_service.dart';
+// import '../services/settings_service.dart';
+// import '../widgets/hourly_prompt_dialog.dart';
 import '../widgets/personal_drawer.dart';
 import 'about_screen.dart';
 import 'event/event_screen.dart';
@@ -111,34 +112,35 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
       const FocusScreen(),
       const StatsScreen(),
     ];
-    HourlyPromptService.setShowPrompt((hourToRecord) {
-      if (!mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        showHourlyPromptDialog(context, hourStart: hourToRecord);
-      });
-    });
-    HourlyPromptService.start();
-    _checkNotificationLaunch();
+    // 定期问卷与主页弹窗已关闭，需要时再启用
+    // HourlyPromptService.setShowPrompt((hourToRecord) {
+    //   if (!mounted) return;
+    //   WidgetsBinding.instance.addPostFrameCallback((_) {
+    //     if (!mounted) return;
+    //     showHourlyPromptDialog(context, hourStart: hourToRecord);
+    //   });
+    // });
+    // HourlyPromptService.start();
+    // _checkNotificationLaunch();
   }
 
-  void _checkNotificationLaunch() {
-    final hour = NotificationService.pendingHourToRecord;
-    if (hour == null || !mounted) return;
-    NotificationService.clearPendingHour();
-    if (!SettingsService.current.hourlyPromptEnabled) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showHourlyPromptDialog(context, hourStart: hour);
-    });
-  }
+  // void _checkNotificationLaunch() {
+  //   final hour = NotificationService.pendingHourToRecord;
+  //   if (hour == null || !mounted) return;
+  //   NotificationService.clearPendingHour();
+  //   if (!SettingsService.current.hourlyPromptEnabled) return;
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     if (!mounted) return;
+  //     showHourlyPromptDialog(context, hourStart: hour);
+  //   });
+  // }
 
   @override
   void dispose() {
     _exitBackTimer?.cancel();
     _longPressActivateTimer?.cancel();
     _timelineExpandController.dispose();
-    HourlyPromptService.stop();
+    // HourlyPromptService.stop();
     super.dispose();
   }
 

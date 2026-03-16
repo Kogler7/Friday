@@ -10,7 +10,7 @@ import 'services/chat_storage_service.dart';
 import 'services/idea_session_storage.dart';
 import 'services/scheduled_dnd_storage.dart';
 import 'services/status_preset_storage.dart';
-import 'services/notification_service.dart';
+// import 'services/notification_service.dart'; // 定期问卷已关闭
 import 'services/settings_service.dart';
 import 'services/storage_service.dart';
 import 'services/todo_storage_service.dart';
@@ -127,17 +127,18 @@ class _AppLoaderState extends State<_AppLoader> {
       if (!mounted) return;
       setState(() => _ready = true);
       // 进入主页后再在后台初始化通知，避免启动阶段卡死
-      Future.delayed(const Duration(milliseconds: 500), () {
-        try {
-          NotificationService.init().then((_) {
-            if (kDebugMode) {
-              NotificationService.scheduleDevModePrompts();
-            } else {
-              NotificationService.scheduleHourlyPrompts();
-            }
-          });
-        } catch (_) {}
-      });
+      // 定期问卷通知已关闭，需要时再启用
+      // Future.delayed(const Duration(milliseconds: 500), () {
+      //   try {
+      //     NotificationService.init().then((_) {
+      //       if (kDebugMode) {
+      //         NotificationService.scheduleDevModePrompts();
+      //       } else {
+      //         NotificationService.scheduleHourlyPrompts();
+      //       }
+      //     });
+      //   } catch (_) {}
+      // });
     } catch (e, st) {
       debugPrint('Friday init error: $e\n$st');
       if (mounted) setState(() => _error = e.toString());

@@ -48,7 +48,7 @@ class IdeaBubble extends StatelessWidget {
     final hiddenStyle = theme.colorScheme.outline;
 
     final crossAlign = isAssistant ? CrossAxisAlignment.start : CrossAxisAlignment.end;
-    final textAlign = isAssistant ? TextAlign.left : TextAlign.right;
+    final textAlign = TextAlign.left;
     final bubble = Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 14,
