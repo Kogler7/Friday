@@ -7,6 +7,7 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module';
+import { registerAgentWebSocket } from './agent/agent-ws.register';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -27,6 +28,8 @@ async function bootstrap(): Promise<void> {
       transform: true,
     }),
   );
+
+  await registerAgentWebSocket(app);
 
   const port = Number(config.get('PORT')) || 3000;
   await app.listen(port, '0.0.0.0');
