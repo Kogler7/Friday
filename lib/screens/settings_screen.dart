@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'transfer/transfer_bridge_screen.dart';
 import '../services/activity_tag_storage.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
@@ -79,9 +80,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     NotificationService.scheduleHourlyPrompts();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('设置已保存')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('设置已保存')));
     }
   }
 
@@ -105,10 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           const Text(
             '主题',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Card(
@@ -120,8 +118,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text(
                     '外观',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   SegmentedButton<ThemeMode>(
@@ -152,8 +150,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text(
                     '主题色',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -176,9 +174,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 shape: BoxShape.circle,
                                 border: isSelected
                                     ? Border.all(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                         width: 3,
                                       )
                                     : null,
@@ -203,10 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(height: 24),
           const Text(
             '想法',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           ListTile(
@@ -217,7 +212,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : '发送最近 $_ideaContextMessageCount 条消息作为上下文',
             ),
             trailing: DropdownButton<int>(
-              value: const [0, 5, 10, 20, 30, 50].contains(_ideaContextMessageCount)
+              value:
+                  const [
+                    0,
+                    5,
+                    10,
+                    20,
+                    30,
+                    50,
+                  ].contains(_ideaContextMessageCount)
                   ? _ideaContextMessageCount
                   : 10,
               items: const [
@@ -233,13 +236,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
+          ListTile(
+            title: const Text('跨端对接'),
+            subtitle: const Text('桌面生成二维码，手机扫码后临时上传数据'),
+            trailing: const Icon(Icons.qr_code_2),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const TransferBridgeScreen(),
+                ),
+              );
+            },
+          ),
           const Divider(height: 24),
           const Text(
             '状态统计',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           ListTile(
@@ -261,10 +274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(height: 24),
           const Text(
             '提醒',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           ListTile(
@@ -290,10 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(height: 24),
           const Text(
             '静默时段',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           ListTile(
@@ -341,17 +348,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? _quietDefaultPresetId
                       : (presets.isNotEmpty ? presets.first.id : null),
                   items: presets
-                      .map((p) => DropdownMenuItem(
-                            value: p.id,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(p.icon, size: 20, color: p.color),
-                                const SizedBox(width: 8),
-                                Text(p.name),
-                              ],
-                            ),
-                          ))
+                      .map(
+                        (p) => DropdownMenuItem(
+                          value: p.id,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(p.icon, size: 20, color: p.color),
+                              const SizedBox(width: 8),
+                              Text(p.name),
+                            ],
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) {
                     if (v != null) setState(() => _quietDefaultPresetId = v);

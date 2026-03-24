@@ -1,7 +1,7 @@
+import '../data/repositories/repository_facade.dart';
 import '../models/status/status_preset.dart';
 import '../models/status/status_record_data.dart';
 import 'status_preset_storage.dart';
-import 'storage_service.dart';
 
 /// 推荐结果
 class RecommendationResult {
@@ -39,7 +39,10 @@ class StatusRecommendationService {
 
   /// 获取推荐：历史 >= 3 天则按同时刻统计，否则用默认
   static RecommendationResult getRecommendation(DateTime slotStart) {
-    final records = StorageService.getRecordsForSlotAcrossDays(slotStart, historyDays);
+    final records = RepositoryFacade.status.getRecordsForSlotAcrossDays(
+      slotStart,
+      historyDays,
+    );
 
     if (records.length >= minSampleDays) {
       final tagCounts = <String, int>{};
@@ -99,11 +102,7 @@ class StatusRecommendationService {
         preset = presets.first;
       }
     }
-    return RecommendationResult(
-      preset: preset,
-      probability: 0,
-      sampleCount: 0,
-    );
+    return RecommendationResult(preset: preset, probability: 0, sampleCount: 0);
   }
 
   static StatusPreset? _presetForTag(String tag) {

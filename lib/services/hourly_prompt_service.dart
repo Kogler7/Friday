@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/repository_facade.dart';
 import '../models/status/status_record_data.dart';
 import 'notification_service.dart';
 import 'scheduled_dnd_storage.dart';
 import 'settings_service.dart';
 import 'status_preset_storage.dart';
-import 'storage_service.dart';
 
 /// 按设置间隔检查：若上一间隔尚未记录则弹窗或静默时段内自动填休息。
 /// 开发模式下改为每 2 分钟触发一次，便于测试。
@@ -17,6 +17,7 @@ class HourlyPromptService {
   static Timer? _timer;
   static void Function(DateTime hourToRecord)? _onShowPrompt;
   static bool _dialogShowing = false;
+
   /// 开发模式：已触发过的 2 分钟槽，避免同一槽重复弹窗
   static DateTime? _lastShownSlot;
 
@@ -40,10 +41,16 @@ class HourlyPromptService {
     _timer?.cancel();
     if (kDebugMode) {
       _runDevCheck();
-      _timer = Timer.periodic(const Duration(seconds: 15), (_) => _runDevCheck());
+      _timer = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) => _runDevCheck(),
+      );
     } else {
       _runProdCheck();
-      _timer = Timer.periodic(const Duration(minutes: 1), (_) => _runProdCheck());
+      _timer = Timer.periodic(
+        const Duration(minutes: 1),
+        (_) => _runProdCheck(),
+      );
     }
   }
 
@@ -57,19 +64,33 @@ class HourlyPromptService {
     final intervalMin = SettingsService.isInitialized
         ? SettingsService.current.reminderIntervalMinutes
         : 60;
-    final currentHourStart = DateTime(now.year, now.month, now.day, now.hour, 0, 0, 0);
+    final currentHourStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      0,
+      0,
+      0,
+    );
     // 仅在前 10 分钟内检查上一间隔
     if (now.minute >= 10) return;
-    final intervalStartToRecord =
-        currentHourStart.subtract(Duration(minutes: intervalMin));
+    final intervalStartToRecord = currentHourStart.subtract(
+      Duration(minutes: intervalMin),
+    );
     final length = Duration(minutes: intervalMin);
-    if (StorageService.hasRecordForInterval(intervalStartToRecord, length)) return;
+    if (RepositoryFacade.status.hasRecordForInterval(
+      intervalStartToRecord,
+      length,
+    )) {
+      return;
+    }
     if (_dialogShowing) return;
     final dnd = ScheduledDndStorage.getActiveFor(intervalStartToRecord);
     if (dnd != null) {
       final preset = StatusPresetStorage.getById(dnd.presetId);
       final data = preset?.data ?? const StatusRecordData(tagIds: ['睡眠']);
-      StorageService.saveRecordsForInterval(
+      RepositoryFacade.status.saveRecordsForInterval(
         intervalStartToRecord,
         length,
         data,
@@ -78,10 +99,12 @@ class HourlyPromptService {
     }
     if (SettingsService.isInitialized &&
         SettingsService.current.isSlotInQuietPeriod(intervalStartToRecord)) {
-      final presetId = SettingsService.current.quietPeriodDefaultPresetId ?? 'builtin_resting';
+      final presetId =
+          SettingsService.current.quietPeriodDefaultPresetId ??
+          'builtin_resting';
       final preset = StatusPresetStorage.getById(presetId);
       final data = preset?.data ?? const StatusRecordData(tagIds: ['休息']);
-      StorageService.saveRecordsForInterval(
+      RepositoryFacade.status.saveRecordsForInterval(
         intervalStartToRecord,
         length,
         data,
@@ -109,14 +132,14 @@ class HourlyPromptService {
       0,
     );
     final slotToRecord = floor2Min.subtract(const Duration(minutes: 2));
-    if (StorageService.getRecordForHour(slotToRecord) != null) return;
+    if (RepositoryFacade.status.getRecordForHour(slotToRecord) != null) return;
     if (_dialogShowing) return;
     if (_lastShownSlot != null && _lastShownSlot == slotToRecord) return;
     final dnd = ScheduledDndStorage.getActiveFor(slotToRecord);
     if (dnd != null) {
       final preset = StatusPresetStorage.getById(dnd.presetId);
       final data = preset?.data ?? const StatusRecordData(tagIds: ['睡眠']);
-      StorageService.saveRecordsForInterval(
+      RepositoryFacade.status.saveRecordsForInterval(
         slotToRecord,
         const Duration(minutes: 2),
         data,
@@ -125,10 +148,12 @@ class HourlyPromptService {
     }
     if (SettingsService.isInitialized &&
         SettingsService.current.isSlotInQuietPeriod(slotToRecord)) {
-      final presetId = SettingsService.current.quietPeriodDefaultPresetId ?? 'builtin_resting';
+      final presetId =
+          SettingsService.current.quietPeriodDefaultPresetId ??
+          'builtin_resting';
       final preset = StatusPresetStorage.getById(presetId);
       final data = preset?.data ?? const StatusRecordData(tagIds: ['休息']);
-      StorageService.saveRecordsForInterval(
+      RepositoryFacade.status.saveRecordsForInterval(
         slotToRecord,
         const Duration(minutes: 2),
         data,

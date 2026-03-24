@@ -1,19 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'constants/app_config.dart';
+import 'data/repositories/repository_facade.dart';
 import 'screens/main_shell.dart';
 import 'services/activity_tag_storage.dart';
 import 'services/agent_storage.dart';
-import 'services/chat_storage_service.dart';
-import 'services/idea_session_storage.dart';
+import 'services/legacy_auto_migration_service.dart';
 import 'services/scheduled_dnd_storage.dart';
 import 'services/status_preset_storage.dart';
 // import 'services/notification_service.dart'; // 定期问卷已关闭
 import 'services/settings_service.dart';
-import 'services/storage_service.dart';
-import 'services/todo_storage_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,11 +76,17 @@ class _FridayAppState extends State<FridayApp> with WidgetsBindingObserver {
       title: 'Friday',
       debugShowCheckedModeBanner: _userDevMode,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: seedColor,
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: seedColor,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
       themeMode: prefs.themeMode,
@@ -114,16 +117,11 @@ class _AppLoaderState extends State<_AppLoader> {
     try {
       await SettingsService.init();
       await AgentStorage.init();
-      await StorageService.init();
       await StatusPresetStorage.init();
       await ActivityTagStorage.init();
       await ScheduledDndStorage.init();
-      await Future.delayed(Duration.zero);
-      await ChatStorageService.init();
-      await Future.delayed(Duration.zero);
-      await IdeaSessionStorage.init();
-      await Future.delayed(Duration.zero);
-      await TodoStorageService.init();
+      await RepositoryFacade.init();
+      await LegacyAutoMigrationService.runIfEnabled();
       if (!mounted) return;
       setState(() => _ready = true);
       // 进入主页后再在后台初始化通知，避免启动阶段卡死
@@ -156,7 +154,11 @@ class _AppLoaderState extends State<_AppLoader> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.error,
+                ),
                 const SizedBox(height: 16),
                 Text('初始化失败', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
@@ -177,8 +179,8 @@ class _AppLoaderState extends State<_AppLoader> {
             Text(
               '加载中…',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

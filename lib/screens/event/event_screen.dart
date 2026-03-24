@@ -2,19 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../common/slidable_action_tile.dart';
+import '../../data/repositories/repository_facade.dart';
 import '../../models/event/todo_item.dart';
 import '../../services/dev_todo_sample.dart';
-import '../../services/todo_storage_service.dart';
 import '../../widgets/todo_edit_sheet.dart';
 import 'event_filter_chip.dart';
 import 'event_list_tile.dart';
 
 /// 筛选类型
-enum _EventFilter {
-  all,
-  active,
-  completed,
-}
+enum _EventFilter { all, active, completed }
 
 /// 日程页：仅展示待办清单，时间轴已移至「时间轴」页
 class EventScreen extends StatefulWidget {
@@ -60,7 +56,9 @@ class _EventScreenState extends State<EventScreen> {
           tooltip: _useTestData ? '测试数据' : '真实数据',
           onPressed: () {
             _toggleTestData();
-            WidgetsBinding.instance.addPostFrameCallback((_) => _notifyAppBarActions());
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _notifyAppBarActions(),
+            );
           },
         ),
     ];
@@ -71,7 +69,7 @@ class _EventScreenState extends State<EventScreen> {
       if (_useTestData) {
         _items = List.from(DevTodoSample.getSampleTodos());
       } else {
-        _items = TodoStorageService.getTodos();
+        _items = RepositoryFacade.todo.getTodos();
       }
     });
   }
@@ -82,7 +80,7 @@ class _EventScreenState extends State<EventScreen> {
       if (_useTestData) {
         _items = List.from(DevTodoSample.getSampleTodos());
       } else {
-        _items = TodoStorageService.getTodos();
+        _items = RepositoryFacade.todo.getTodos();
       }
     });
   }
@@ -106,7 +104,7 @@ class _EventScreenState extends State<EventScreen> {
       });
       return;
     }
-    await TodoStorageService.toggleTodo(item.id);
+    await RepositoryFacade.todo.toggleTodo(item.id);
     _load();
   }
 
@@ -115,7 +113,7 @@ class _EventScreenState extends State<EventScreen> {
       setState(() => _items.removeWhere((e) => e.id == id));
       return;
     }
-    await TodoStorageService.deleteTodo(id);
+    await RepositoryFacade.todo.deleteTodo(id);
     _load();
   }
 
@@ -159,11 +157,11 @@ class _EventScreenState extends State<EventScreen> {
                     _filter == _EventFilter.all
                         ? '暂无日程，点击右下角 + 添加'
                         : _filter == _EventFilter.active
-                            ? '没有未完成项'
-                            : '没有已完成项',
+                        ? '没有未完成项'
+                        : '没有已完成项',
                     style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 )
               : ListView.builder(
@@ -218,9 +216,9 @@ class _EventScreenState extends State<EventScreen> {
             return;
           }
           if (item == null) {
-            await TodoStorageService.addTodoItem(updated);
+            await RepositoryFacade.todo.addTodoItem(updated);
           } else {
-            await TodoStorageService.updateTodoItem(updated);
+            await RepositoryFacade.todo.updateTodoItem(updated);
           }
           _load();
         },
@@ -230,7 +228,7 @@ class _EventScreenState extends State<EventScreen> {
                   setState(() => _items.removeWhere((e) => e.id == item.id));
                   return;
                 }
-                await TodoStorageService.deleteTodo(item.id);
+                await RepositoryFacade.todo.deleteTodo(item.id);
                 _load();
               }
             : null,

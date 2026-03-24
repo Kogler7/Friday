@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../data/repositories/repository_facade.dart';
 import '../../services/status_preset_storage.dart';
-import '../../services/storage_service.dart';
 
 /// 批量设置：将指定日期时间范围内的记录全部改为某预设
 void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
@@ -27,7 +27,7 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
           }
           final selectedPreset =
               presets.where((p) => p.id == selectedPresetId).firstOrNull ??
-                  presets.firstOrNull;
+              presets.firstOrNull;
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -41,15 +41,15 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
                   Text(
                     '批量设置',
                     style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '将选定日期时间范围内的记录全部改为指定预设',
                     style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   ListTile(
@@ -113,33 +113,32 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
                     },
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '预设',
-                    style: Theme.of(ctx).textTheme.titleSmall,
-                  ),
+                  Text('预设', style: Theme.of(ctx).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: selectedPresetId,
+                    initialValue: selectedPresetId,
                     items: presets
-                        .map((p) => DropdownMenuItem(
-                              value: p.id,
-                              child: Row(
-                                children: [
-                                  Icon(p.icon, size: 20, color: p.color),
-                                  const SizedBox(width: 8),
-                                  Text(p.name),
-                                ],
-                              ),
-                            ))
+                        .map(
+                          (p) => DropdownMenuItem(
+                            value: p.id,
+                            child: Row(
+                              children: [
+                                Icon(p.icon, size: 20, color: p.color),
+                                const SizedBox(width: 8),
+                                Text(p.name),
+                              ],
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) => setState(() => selectedPresetId = v),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed: selectedPreset == null ||
-                            dateEnd.isBefore(dateStart)
+                    onPressed:
+                        selectedPreset == null || dateEnd.isBefore(dateStart)
                         ? null
-                          : () {
+                        : () {
                             final preset = selectedPreset;
                             final ds = dateStart;
                             final de = dateEnd;
@@ -147,17 +146,23 @@ void showBatchSetSheet(BuildContext context, VoidCallback onComplete) {
                             final te = timeEnd;
                             final parentContext = context;
                             Navigator.of(ctx).pop();
-                            WidgetsBinding.instance.addPostFrameCallback((_) async {
-                              await StorageService.saveRecordsForBatch(
+                            WidgetsBinding.instance.addPostFrameCallback((
+                              _,
+                            ) async {
+                              await RepositoryFacade.status.saveRecordsForBatch(
                                 dateStart: ds,
                                 dateEnd: de,
-                                timeStart: ts,
-                                timeEnd: te,
+                                startHour: ts.hour,
+                                startMinute: ts.minute,
+                                endHour: te.hour,
+                                endMinute: te.minute,
                                 data: preset.data.copyWith(presetId: preset.id),
                               );
                               onComplete();
                               if (parentContext.mounted) {
-                                ScaffoldMessenger.of(parentContext).showSnackBar(
+                                ScaffoldMessenger.of(
+                                  parentContext,
+                                ).showSnackBar(
                                   const SnackBar(content: Text('批量设置完成')),
                                 );
                               }

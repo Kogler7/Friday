@@ -3,11 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../constants/app_config.dart' show userDeveloperMode;
+import '../../data/repositories/repository_facade.dart';
 import '../../models/agent/llm_agent.dart';
 import '../../models/idea/chat_message.dart';
 import '../../models/idea/idea_session.dart';
 import '../../services/agent_storage.dart';
-import '../../services/idea_session_storage.dart';
 import '../../services/llm_api_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/local_auth_service.dart';
@@ -213,7 +213,7 @@ class _IdeaScreenState extends State<IdeaScreen>
     if (userDeveloperMode.value) {
       if (mounted) _loadCurrentSession();
     } else {
-      IdeaSessionStorage.ensureCurrentSessionVisible().then((_) {
+      RepositoryFacade.idea.ensureCurrentSessionVisible().then((_) {
         if (mounted) _loadCurrentSession();
       });
     }
@@ -249,7 +249,7 @@ class _IdeaScreenState extends State<IdeaScreen>
   }
 
   void _loadCurrentSession() {
-    final id = IdeaSessionStorage.getCurrentSessionId();
+    final id = RepositoryFacade.idea.getCurrentSessionId();
     if (id == null) {
       setState(() {
         _currentSession = null;
@@ -257,9 +257,9 @@ class _IdeaScreenState extends State<IdeaScreen>
       });
       return;
     }
-    final session = IdeaSessionStorage.getSession(id);
+    final session = RepositoryFacade.idea.getSession(id);
     if (session == null) {
-      IdeaSessionStorage.setCurrentSessionId(null);
+      RepositoryFacade.idea.setCurrentSessionId(null);
       setState(() {
         _currentSession = null;
         _messages = [];
@@ -375,14 +375,15 @@ class _IdeaScreenState extends State<IdeaScreen>
     if (result == null ||
         result == MessageDeleteConfirmResult.cancel ||
         _currentSession == null ||
-        !mounted)
+        !mounted) {
       return;
+    }
     final session = _currentSession!;
     if (result == MessageDeleteConfirmResult.delete) {
       final newMessages = session.messages
           .where((m) => m.id != msg.id)
           .toList();
-      await IdeaSessionStorage.saveSession(
+      await RepositoryFacade.idea.saveSession(
         session.copyWith(messages: newMessages, updatedAt: DateTime.now()),
       );
       if (mounted) {
@@ -394,7 +395,7 @@ class _IdeaScreenState extends State<IdeaScreen>
       final newMessages = session.messages
           .map((m) => m.id == msg.id ? m.copyWith(isHidden: true) : m)
           .toList();
-      await IdeaSessionStorage.saveSession(
+      await RepositoryFacade.idea.saveSession(
         session.copyWith(messages: newMessages, updatedAt: DateTime.now()),
       );
       if (mounted) {
@@ -418,7 +419,7 @@ class _IdeaScreenState extends State<IdeaScreen>
           final newMessages = session.messages
               .map((m) => m.id == msg.id ? m.copyWith(content: newContent) : m)
               .toList();
-          await IdeaSessionStorage.saveSession(
+          await RepositoryFacade.idea.saveSession(
             session.copyWith(messages: newMessages, updatedAt: DateTime.now()),
           );
           _loadCurrentSession();
@@ -503,14 +504,14 @@ class _IdeaScreenState extends State<IdeaScreen>
         return;
       }
     }
-    await IdeaSessionStorage.setCurrentSessionId(session.id);
+    await RepositoryFacade.idea.setCurrentSessionId(session.id);
     _loadCurrentSession();
     if (mounted) Navigator.of(context).pop();
     _scrollToBottom();
   }
 
   void _addSession() {
-    IdeaSessionStorage.setCurrentSessionId(null);
+    RepositoryFacade.idea.setCurrentSessionId(null);
     _loadCurrentSession();
   }
 
@@ -531,19 +532,19 @@ class _IdeaScreenState extends State<IdeaScreen>
     });
     _controller.clear();
     if (_currentSession == null && atAgent == null) {
-      final session = await IdeaSessionStorage.createSessionWithFirstMessage(
+      final session = await RepositoryFacade.idea.createSessionWithFirstMessage(
         text,
       );
-      await IdeaSessionStorage.setCurrentSessionId(session.id);
+      await RepositoryFacade.idea.setCurrentSessionId(session.id);
       _loadCurrentSession();
       _scrollToBottom();
       return;
     }
     if (_currentSession == null && atAgent != null) {
-      final session = await IdeaSessionStorage.createSessionWithFirstMessage(
+      final session = await RepositoryFacade.idea.createSessionWithFirstMessage(
         text,
       );
-      await IdeaSessionStorage.setCurrentSessionId(session.id);
+      await RepositoryFacade.idea.setCurrentSessionId(session.id);
       final assistantId = '${DateTime.now().millisecondsSinceEpoch}_assistant';
       final assistantMsg = ChatMessage(
         id: assistantId,
@@ -559,7 +560,7 @@ class _IdeaScreenState extends State<IdeaScreen>
         messages: newMessages,
         updatedAt: DateTime.now(),
       );
-      await IdeaSessionStorage.saveSession(updated);
+      await RepositoryFacade.idea.saveSession(updated);
       _loadCurrentSession();
       _scrollToBottom();
       setState(() {
@@ -595,7 +596,7 @@ class _IdeaScreenState extends State<IdeaScreen>
       );
       newMessages = List<ChatMessage>.from(newMessages)..add(assistantMsg);
       final newTitle = session.title == '未命名会话' && newMessages.isNotEmpty
-          ? IdeaSessionStorage.sessionTitle(
+          ? RepositoryFacade.idea.sessionTitle(
               session.copyWith(messages: newMessages),
             )
           : session.title;
@@ -604,7 +605,7 @@ class _IdeaScreenState extends State<IdeaScreen>
         updatedAt: DateTime.now(),
         title: newTitle,
       );
-      await IdeaSessionStorage.saveSession(updated);
+      await RepositoryFacade.idea.saveSession(updated);
       _loadCurrentSession();
       _scrollToBottom();
       setState(() {
@@ -615,7 +616,7 @@ class _IdeaScreenState extends State<IdeaScreen>
       return;
     }
     final newTitle = session.title == '未命名会话' && newMessages.isNotEmpty
-        ? IdeaSessionStorage.sessionTitle(
+        ? RepositoryFacade.idea.sessionTitle(
             session.copyWith(messages: newMessages),
           )
         : session.title;
@@ -624,7 +625,7 @@ class _IdeaScreenState extends State<IdeaScreen>
       updatedAt: DateTime.now(),
       title: newTitle,
     );
-    await IdeaSessionStorage.saveSession(updated);
+    await RepositoryFacade.idea.saveSession(updated);
     _loadCurrentSession();
     _scrollToBottom();
   }
@@ -641,8 +642,9 @@ class _IdeaScreenState extends State<IdeaScreen>
           context,
         ).showSnackBar(const SnackBar(content: Text('请先在设置中配置 API 接入点和密钥')));
       }
-      if (assistantId != null)
+      if (assistantId != null) {
         _removeAssistantPlaceholder(session.id, assistantId);
+      }
       return;
     }
     final globalContextCount = SettingsService.current.ideaContextMessageCount;
@@ -662,7 +664,10 @@ class _IdeaScreenState extends State<IdeaScreen>
           startIndex = i;
         }
       } else {
-        startIndex = (session.messages.length - globalContextCount).clamp(0, session.messages.length);
+        startIndex = (session.messages.length - globalContextCount).clamp(
+          0,
+          session.messages.length,
+        );
         if (globalContextCount <= 0) startIndex = session.messages.length;
       }
       for (var i = startIndex; i < session.messages.length; i++) {
@@ -693,18 +698,16 @@ class _IdeaScreenState extends State<IdeaScreen>
           responseBody: e.responseBody,
         );
       }
-      if (assistantId != null)
+      if (assistantId != null) {
         _removeAssistantPlaceholder(session.id, assistantId);
+      }
     } catch (e, stack) {
       if (mounted) {
-        _showLlmErrorSnackBar(
-          context,
-          e.toString(),
-          stack.toString(),
-        );
+        _showLlmErrorSnackBar(context, e.toString(), stack.toString());
       }
-      if (assistantId != null)
+      if (assistantId != null) {
         _removeAssistantPlaceholder(session.id, assistantId);
+      }
     }
     if (!mounted) return;
     final content = _streamingContent ?? '';
@@ -713,13 +716,13 @@ class _IdeaScreenState extends State<IdeaScreen>
       _streamingContent = null;
     });
     if (assistantId == null) return;
-    final s = IdeaSessionStorage.getSession(session.id);
+    final s = RepositoryFacade.idea.getSession(session.id);
     if (s == null) return;
     final newMessages = s.messages.map((m) {
       if (m.id == assistantId) return m.copyWith(content: content);
       return m;
     }).toList();
-    await IdeaSessionStorage.saveSession(
+    await RepositoryFacade.idea.saveSession(
       s.copyWith(messages: newMessages, updatedAt: DateTime.now()),
     );
     _loadCurrentSession();
@@ -770,10 +773,10 @@ class _IdeaScreenState extends State<IdeaScreen>
     String sessionId,
     String assistantId,
   ) async {
-    final s = IdeaSessionStorage.getSession(sessionId);
+    final s = RepositoryFacade.idea.getSession(sessionId);
     if (s == null) return;
     final newMessages = s.messages.where((m) => m.id != assistantId).toList();
-    await IdeaSessionStorage.saveSession(
+    await RepositoryFacade.idea.saveSession(
       s.copyWith(messages: newMessages, updatedAt: DateTime.now()),
     );
     setState(() {
@@ -874,8 +877,9 @@ class _IdeaScreenState extends State<IdeaScreen>
                   behavior: HitTestBehavior.translucent,
                   onPointerDown: (_) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted)
+                      if (mounted) {
                         FocusManager.instance.primaryFocus?.unfocus();
+                      }
                     });
                   },
                   child: _messages.isEmpty
@@ -1274,7 +1278,7 @@ class _IdeaScreenState extends State<IdeaScreen>
                   child: AgentPickerOverlay(
                     agents: AgentStorage.getAll(),
                     onAgentSelected: (agent) {
-                      _controller.text = _controller.text + agent.name + ' ';
+                      _controller.text = '${_controller.text}${agent.name} ';
                       _controller.selection = TextSelection.fromPosition(
                         TextPosition(offset: _controller.text.length),
                       );

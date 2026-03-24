@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../common/slidable_action_tile.dart';
+import '../../data/repositories/repository_facade.dart';
 import '../../models/idea/idea_session.dart';
 import '../../services/local_auth_service.dart';
-import '../../services/idea_session_storage.dart';
 import 'delete_confirm_dialog.dart';
 import 'session_edit_constants.dart';
 import 'session_edit_sheet.dart';
@@ -51,8 +51,9 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
 
   void _refresh() {
     setState(() {
-      _sessions = IdeaSessionStorage.getAllSessions(includeHidden: false);
-      _hiddenSessions = IdeaSessionStorage.getAllSessions(includeHidden: true)
+      _sessions = RepositoryFacade.idea.getAllSessions(includeHidden: false);
+      _hiddenSessions = RepositoryFacade.idea
+          .getAllSessions(includeHidden: true)
           .where((s) => s.isHidden)
           .toList();
     });
@@ -66,22 +67,20 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
     if (result == LocalAuthResult.failed) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isUnlock ? '验证未通过，无法解锁' : '验证未通过，无法锁定'),
-          ),
+          SnackBar(content: Text(isUnlock ? '验证未通过，无法解锁' : '验证未通过，无法锁定')),
         );
       }
       return;
     }
     final updated = session.copyWith(isLocked: !session.isLocked);
-    await IdeaSessionStorage.saveSession(updated);
+    await RepositoryFacade.idea.saveSession(updated);
     _refresh();
     widget.onSessionsChanged();
   }
 
   Future<void> _onToggleStar(IdeaSession session) async {
     final updated = session.copyWith(isStarred: !session.isStarred);
-    await IdeaSessionStorage.saveSession(updated);
+    await RepositoryFacade.idea.saveSession(updated);
     _refresh();
     widget.onSessionsChanged();
   }
@@ -92,25 +91,25 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
 
   Future<void> _onSetHidden(IdeaSession session) async {
     final updated = session.copyWith(isHidden: true);
-    await IdeaSessionStorage.saveSession(updated);
+    await RepositoryFacade.idea.saveSession(updated);
     _refresh();
     widget.onSessionsChanged();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已删除会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已删除会话')));
     }
   }
 
   Future<void> _onUnhide(IdeaSession session) async {
     final updated = session.copyWith(isHidden: false);
-    await IdeaSessionStorage.saveSession(updated);
+    await RepositoryFacade.idea.saveSession(updated);
     _refresh();
     widget.onSessionsChanged();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已删除会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已删除会话')));
     }
   }
 
@@ -119,7 +118,9 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
       context: context,
       builder: (ctx) => DeleteConfirmDialog(sessionTitle: session.title),
     );
-    if (result == null || result == DeleteConfirmResult.cancel || !mounted) return;
+    if (result == null || result == DeleteConfirmResult.cancel || !mounted) {
+      return;
+    }
     if (result == DeleteConfirmResult.setHidden) {
       if (widget.isDevMode && session.isHidden) {
         await _onUnhide(session);
@@ -128,13 +129,13 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
       }
       return;
     }
-    await IdeaSessionStorage.deleteSession(session.id);
+    await RepositoryFacade.idea.deleteSession(session.id);
     _refresh();
     widget.onSessionsChanged();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已删除会话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已删除会话')));
     }
   }
 
@@ -146,7 +147,7 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
       builder: (ctx) => SessionEditSheet(
         session: session,
         onSave: (updated) async {
-          await IdeaSessionStorage.saveSession(updated);
+          await RepositoryFacade.idea.saveSession(updated);
           _refresh();
           widget.onSessionsChanged();
         },
@@ -166,16 +167,30 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     final nonStarred = raw.where((s) => !s.isStarred).toList();
 
-    final justNow = nonStarred.where((s) => s.updatedAt.isAfter(oneHourAgo)).toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final within7 = nonStarred.where((s) =>
-        !s.updatedAt.isAfter(oneHourAgo) && s.updatedAt.isAfter(sevenDaysAgo)).toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final within30 = nonStarred.where((s) =>
-        !s.updatedAt.isAfter(sevenDaysAgo) && s.updatedAt.isAfter(thirtyDaysAgo)).toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final other = nonStarred.where((s) => !s.updatedAt.isAfter(thirtyDaysAgo)).toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final justNow =
+        nonStarred.where((s) => s.updatedAt.isAfter(oneHourAgo)).toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final within7 =
+        nonStarred
+            .where(
+              (s) =>
+                  !s.updatedAt.isAfter(oneHourAgo) &&
+                  s.updatedAt.isAfter(sevenDaysAgo),
+            )
+            .toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final within30 =
+        nonStarred
+            .where(
+              (s) =>
+                  !s.updatedAt.isAfter(sevenDaysAgo) &&
+                  s.updatedAt.isAfter(thirtyDaysAgo),
+            )
+            .toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final other =
+        nonStarred.where((s) => !s.updatedAt.isAfter(thirtyDaysAgo)).toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     final entries = <SessionListEntry>[];
     if (starred.isNotEmpty) {
@@ -215,7 +230,12 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final raw = widget.isDevMode
-        ? [..._sessions, ..._hiddenSessions.where((s) => !_sessions.any((x) => x.id == s.id))]
+        ? [
+            ..._sessions,
+            ..._hiddenSessions.where(
+              (s) => !_sessions.any((x) => x.id == s.id),
+            ),
+          ]
         : _sessions;
     final entries = _buildGroupedEntries(raw);
 
@@ -277,8 +297,9 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                         }
                         final session = entry.session!;
                         final title = session.title;
-                        final subtitle =
-                            DateFormat('MM-dd HH:mm').format(session.updatedAt);
+                        final subtitle = DateFormat(
+                          'MM-dd HH:mm',
+                        ).format(session.updatedAt);
                         final isLocked = session.isLocked;
                         final isCurrent = session.id == widget.currentSessionId;
                         final leadingIcon = sessionIconForDisplay(
@@ -288,8 +309,8 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                         final leadingColor = session.colorValue != null
                             ? Color(session.colorValue!)
                             : (session.isHidden && widget.isDevMode
-                                ? theme.colorScheme.outline
-                                : null);
+                                  ? theme.colorScheme.outline
+                                  : null);
                         return SlidableActionTile(
                           key: ValueKey(session.id),
                           height: 64,
@@ -355,7 +376,9 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                                         size: 22,
                                         color: session.isStarred
                                             ? Colors.amber.shade700
-                                            : theme.colorScheme.onSurfaceVariant,
+                                            : theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                       ),
                                       onPressed: () => _onToggleStar(session),
                                       style: IconButton.styleFrom(
@@ -364,15 +387,18 @@ class _SessionHistoryDrawerState extends State<SessionHistoryDrawer> {
                                       ),
                                     ),
                                     if (isLocked)
-                                      Icon(Icons.lock,
-                                          size: 20,
-                                          color: theme.colorScheme.primary),
+                                      Icon(
+                                        Icons.lock,
+                                        size: 20,
+                                        color: theme.colorScheme.primary,
+                                      ),
                                   ],
                                 ),
-                                onTap: () =>
-                                    widget.onSessionSelected(session),
+                                onTap: () => widget.onSessionSelected(session),
                                 onLongPress: () => _showSessionLongPressSheet(
-                                    context, session),
+                                  context,
+                                  session,
+                                ),
                               ),
                             ),
                           ),

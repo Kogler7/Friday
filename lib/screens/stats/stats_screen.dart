@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../data/repositories/repository_facade.dart';
 import '../../models/activity/hourly_record.dart';
 import '../../services/status_data_source.dart';
-import '../../services/storage_service.dart';
 import '../../widgets/dimension_chart.dart';
 
 /// 统计页：维度统计图
@@ -20,8 +20,15 @@ class _StatsScreenState extends State<StatsScreen> {
   ChartType _chartType = ChartType.bar;
 
   static const List<String> _dimensions = [
-    '活动标签', '精力使用', '体力使用', '活动动机', '产出定性',
-    '情绪状态', '精力状态', '生理状态', '注意力状态',
+    '活动标签',
+    '精力使用',
+    '体力使用',
+    '活动动机',
+    '产出定性',
+    '情绪状态',
+    '精力状态',
+    '生理状态',
+    '注意力状态',
   ];
 
   @override
@@ -39,7 +46,7 @@ class _StatsScreenState extends State<StatsScreen> {
   void _onDataSourceChanged() => setState(() {});
 
   List<HourlyRecord> _getRecordsForChart() {
-    return StorageService.getRecordsInRange(_rangeStart, _rangeEnd);
+    return RepositoryFacade.status.getRecordsInRange(_rangeStart, _rangeEnd);
   }
 
   String _fmt(DateTime d) => '${d.year}/${d.month}/${d.day}';
@@ -98,25 +105,40 @@ class _StatsScreenState extends State<StatsScreen> {
                                 });
                               }
                             },
-                            child: Text('${_fmt(_rangeStart)} ~ ${_fmt(_rangeEnd)}'),
+                            child: Text(
+                              '${_fmt(_rangeStart)} ~ ${_fmt(_rangeEnd)}',
+                            ),
                           ),
                         ],
                       ),
                       DropdownButton<String>(
                         value: _dimension,
                         items: _dimensions
-                            .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                            .map(
+                              (d) => DropdownMenuItem(value: d, child: Text(d)),
+                            )
                             .toList(),
-                        onChanged: (v) => setState(() => _dimension = v ?? _dimension),
+                        onChanged: (v) =>
+                            setState(() => _dimension = v ?? _dimension),
                       ),
                       SegmentedButton<ChartType>(
                         segments: const [
-                          ButtonSegment(value: ChartType.bar, label: Text('条形')),
-                          ButtonSegment(value: ChartType.line, label: Text('折线')),
-                          ButtonSegment(value: ChartType.pie, label: Text('饼图')),
+                          ButtonSegment(
+                            value: ChartType.bar,
+                            label: Text('条形'),
+                          ),
+                          ButtonSegment(
+                            value: ChartType.line,
+                            label: Text('折线'),
+                          ),
+                          ButtonSegment(
+                            value: ChartType.pie,
+                            label: Text('饼图'),
+                          ),
                         ],
                         selected: {_chartType},
-                        onSelectionChanged: (s) => setState(() => _chartType = s.first),
+                        onSelectionChanged: (s) =>
+                            setState(() => _chartType = s.first),
                       ),
                       const SizedBox(height: 12),
                       SizedBox(

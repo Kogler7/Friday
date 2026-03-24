@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/repository_facade.dart';
 import '../models/activity/hourly_record.dart';
 import '../models/status/status_record_data.dart';
-import 'storage_service.dart';
 
 /// 开发阶段示例数据：仅 [kDebugMode] 下可用。
 class DevSampleData {
@@ -27,9 +27,19 @@ class DevSampleData {
           ? [8, 9, 10, 11, 12, 14, 15, 16, 17, 18]
           : [9, 10, 12, 14, 16];
       for (var i = 0; i < hours.length; i++) {
-        final hourStart = DateTime(date.year, date.month, date.day, hours[i], 0, 0, 0);
+        final hourStart = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          hours[i],
+          0,
+          0,
+          0,
+        );
         final data = _sampleData[i % _sampleData.length];
-        await StorageService.saveRecord(HourlyRecord(hourStart: hourStart, data: data));
+        await RepositoryFacade.status.saveRecord(
+          HourlyRecord(hourStart: hourStart, data: data),
+        );
       }
     }
   }
@@ -40,7 +50,7 @@ class DevSampleData {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
-    await StorageService.clearRecordsForDate(today);
-    await StorageService.clearRecordsForDate(yesterday);
+    await RepositoryFacade.status.clearRecordsForDate(today);
+    await RepositoryFacade.status.clearRecordsForDate(yesterday);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../data/repositories/repository_facade.dart';
 import '../models/activity/hourly_record.dart';
 import '../models/status/status_preset.dart';
 import '../models/status/status_record_data.dart';
@@ -9,19 +10,23 @@ import '../services/hourly_prompt_service.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/status_recommendation_service.dart';
-import '../services/storage_service.dart';
 import 'preset_picker_sheet.dart';
 
-void _saveIntervalAndCancel(DateTime intervalStart, StatusRecordData data) {
+Future<void> _saveIntervalAndCancel(
+  DateTime intervalStart,
+  StatusRecordData data,
+) async {
   final intervalMin = SettingsService.isInitialized
       ? SettingsService.current.reminderIntervalMinutes
       : 60;
   if (kDebugMode) {
-    StorageService.saveRecord(HourlyRecord(hourStart: intervalStart, data: data));
+    await RepositoryFacade.status.saveRecord(
+      HourlyRecord(hourStart: intervalStart, data: data),
+    );
     NotificationService.cancelForSlot(intervalStart);
     return;
   }
-  StorageService.saveRecordsForInterval(
+  await RepositoryFacade.status.saveRecordsForInterval(
     intervalStart,
     Duration(minutes: intervalMin),
     data,
@@ -58,13 +63,19 @@ void showHourlyPromptDialog(
       hourStart: slot,
       timeoutMinutes: timeout,
       recommendation: recommendation,
-      onSelected: (data) {
-        _saveIntervalAndCancel(slot, data);
+      onSelected: (data) async {
+        await _saveIntervalAndCancel(slot, data);
         HourlyPromptService.markDialogClosed();
+        if (!ctx.mounted) return;
         Navigator.of(ctx).pop();
       },
-      onTimeout: () {
-        _saveIntervalAndCancel(slot, recommendation.preset.data.copyWith(presetId: recommendation.preset.id));
+      onTimeout: () async {
+        await _saveIntervalAndCancel(
+          slot,
+          recommendation.preset.data.copyWith(
+            presetId: recommendation.preset.id,
+          ),
+        );
         HourlyPromptService.markDialogClosed();
         if (ctx.mounted) Navigator.of(ctx).pop();
         onTimeout?.call();
@@ -77,8 +88,8 @@ class _HourlyPromptSheet extends StatefulWidget {
   final DateTime hourStart;
   final int timeoutMinutes;
   final RecommendationResult recommendation;
-  final void Function(StatusRecordData data) onSelected;
-  final VoidCallback onTimeout;
+  final Future<void> Function(StatusRecordData data) onSelected;
+  final Future<void> Function() onTimeout;
 
   const _HourlyPromptSheet({
     required this.hourStart,
@@ -133,9 +144,9 @@ class _HourlyPromptSheetState extends State<_HourlyPromptSheet> {
       useSafeArea: true,
       builder: (ctx) => StatusRecordFormSheet(
         initialData: const StatusRecordData(),
-        onSubmit: (data) {
+        onSubmit: (data) async {
           Navigator.of(ctx).pop();
-          widget.onSelected(data);
+          await widget.onSelected(data);
         },
         onCancel: () => Navigator.of(ctx).pop(),
       ),
@@ -187,25 +198,30 @@ class _HourlyPromptSheetState extends State<_HourlyPromptSheet> {
                 Text(
                   '过去一小时你在做什么？',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                Text('时间段：$hourLabel', style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  '时间段：$hourLabel',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   '未选择将在 $_timeText 后自动记为「${rec.preset.name}」'
-                      '${rec.sampleCount > 0 ? '（推荐 ${(rec.probability * 100).toInt()}%）' : ''}'
-                      '${kDebugMode ? '（开发模式超时较短）' : ''}',
+                  '${rec.sampleCount > 0 ? '（推荐 ${(rec.probability * 100).toInt()}%）' : ''}'
+                  '${kDebugMode ? '（开发模式超时较短）' : ''}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 _PresetChip(
                   preset: rec.preset,
                   probability: rec.sampleCount > 0 ? rec.probability : null,
-                  onTap: () => widget.onSelected(rec.preset.data.copyWith(presetId: rec.preset.id)),
+                  onTap: () async => widget.onSelected(
+                    rec.preset.data.copyWith(presetId: rec.preset.id),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
